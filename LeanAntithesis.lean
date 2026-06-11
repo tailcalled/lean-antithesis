@@ -4,4 +4,7 @@ import LeanAntithesis.Entail
 import LeanAntithesis.Lift
 import LeanAntithesis.Syntax
 import LeanAntithesis.Tactic
+import LeanAntithesis.Calculus
+import LeanAntithesis.Linear
+import LeanAntithesis.LinearTactic
 import LeanAntithesis.Examples

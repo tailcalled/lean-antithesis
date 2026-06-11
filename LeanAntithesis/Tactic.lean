@@ -27,18 +27,31 @@ open Lean Elab Tactic Meta
 
 namespace Antithesis
 
-/-- For every local hypothesis `x : AProp`, add `x.excl : x⁺ → x⁻ → False` to
-the context. This surfaces atom exclusivity so the propositional solver can use
-it. -/
+/-! `antithesis_excls` surfaces atom exclusivity (`x⁺ → x⁻ → False`) for every
+`AProp` appearing in the goal, so the propositional solver can use it. -/
+
+/-- Collect every closed `AProp`-typed subterm of `e` (atoms and compounds
+alike); their exclusivity facts are what the propositional solver needs.  We do
+not descend under binders, to avoid loose bound variables. -/
+private partial def collectAPropAtoms (e : Expr) (acc : Array Expr) : MetaM (Array Expr) := do
+  let mut acc := acc
+  if !e.hasLooseBVars then
+    if (← inferType e).cleanupAnnotations.isConstOf ``AProp then
+      unless acc.any (· == e) do acc := acc.push e
+  match e with
+  | .app f a => collectAPropAtoms a (← collectAPropAtoms f acc)
+  | .mdata _ b => collectAPropAtoms b acc
+  | .proj _ _ b => collectAPropAtoms b acc
+  | _ => return acc
+
 elab "antithesis_excls" : tactic => do
   liftMetaTactic fun mvarId => mvarId.withContext do
+    let atoms ← collectAPropAtoms (← mvarId.getType) #[]
     let mut g := mvarId
-    for decl in ← getLCtx do
-      if decl.isImplementationDetail then continue
-      if decl.type.cleanupAnnotations.isConstOf ``AProp then
-        let proof ← mkAppM ``AProp.excl #[decl.toExpr]
-        let (_, g') ← g.note (decl.userName.appendAfter "_excl") proof
-        g := g'
+    for a in atoms, i in [0:atoms.size] do
+      let proof ← mkAppM ``AProp.excl #[a]
+      let (_, g') ← g.note (Name.mkSimple s!"excl{i}") proof
+      g := g'
     return [g]
 
 /-- Reduce an affine goal to intuitionistic logic and solve it.
