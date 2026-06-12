@@ -105,5 +105,36 @@ elab "lweaken" h:(colGt ident) : tactic => do
 macro "lclose" : tactic =>
   `(tactic| (refine Seq.close ?_; simp only [LCtx.interp]; antithesis))
 
+/-! ## Pretty-printing the linear goal
+
+A `Seq Γ G` goal prints as `❲ h₁ : A₁, …, hₙ : Aₙ ⊢ₗ G ❳` instead of the raw
+`LCtx.cons` chain.  This is display only. -/
+
+/-- One displayed resource `name : resource`. -/
+syntax linBinder := ident " : " term
+/-- Display form of a linear sequent goal. -/
+syntax (name := linSeqDisplay) "❲ " linBinder,* " ⊢ₗ " term " ❳" : term
+
+open PrettyPrinter Delaborator SubExpr
+
+/-- Walk the reflected context, delaborating each resource in place. -/
+partial def collectCtx : DelabM (Array (String × Term)) := do
+  match (← getExpr).getAppFnArgs with
+  | (``LCtx.cons, #[nameE, _, _]) =>
+      let resStx ← withNaryArg 1 delab
+      let rest ← withNaryArg 2 collectCtx
+      return #[((nameOf? nameE).getD "_", resStx)] ++ rest
+  | _ => return #[]
+
+/-- Render `Seq Γ G` as `❲ … ⊢ₗ G ❳`. -/
+@[app_delab Antithesis.Linear.Seq]
+def delabSeq : Delab := do
+  guard <| (← getExpr).isAppOfArity ``Seq 2
+  let pairs ← withNaryArg 0 collectCtx
+  let g ← withNaryArg 1 delab
+  let binders ← pairs.mapM fun (n, t) =>
+    `(linBinder| $(mkIdent (Name.mkSimple n)):ident : $t)
+  `(❲ $binders,* ⊢ₗ $g ❳)
+
 end Linear
 end Antithesis

@@ -18,6 +18,18 @@ example : P ⊗ (P ⊸ Q) ⊢ Q := by
   lintro hp hpq
   lclose
 
+-- The delaborator renders the reflected context as a readable sequent.
+/--
+trace: P Q : AProp
+⊢ ❲ hp : P, hpq : P ⊸ Q ⊢ₗ Q ❳
+-/
+#guard_msgs in
+example : P ⊗ (P ⊸ Q) ⊢ Q := by
+  linear
+  lintro hp hpq
+  trace_state
+  lclose
+
 /-- Affine weakening: introduce both resources, discard one, close. -/
 example : P ⊗ Q ⊢ P := by
   linear
