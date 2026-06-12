@@ -6,67 +6,49 @@ Authors: tailcalled
 import LeanAntithesis.Connectives
 
 /-!
-# Validity and entailment
+# Validity and entailment (as data)
 
-An affine proposition `P` **holds** when its affirmation `P⁺` is provable.
-Affine **entailment** `P ⊢ Q` is a Chu morphism: a proof that affirmation
-transports forwards and refutation transports backwards,
-`(P⁺ → Q⁺) ∧ (Q⁻ → P⁻)`.  This is definitionally the validity of `P ⊸ Q`.
+`P` **holds** when its affirmation `P⁺` is inhabited.  An **entailment** `P ⊢ Q`
+is now genuine *data* — a Chu morphism `(P⁺ → Q⁺) × (Q⁻ → P⁻)` — so inhabiting
+it *is* the constructive content (a realizer), and it is computable.
+
+Entailment is universe-heterogeneous, which is what lets quantifier rules relate
+`⨅ x, P x : AProp.{max u v}` to `P a : AProp.{u}`.
 -/
+
+universe u v w
 
 namespace Antithesis
 
-/-- `P` holds / is affirmed: its positive part `P⁺` is provable. -/
-def Holds (P : AProp) : Prop := P.pos
+/-- `P` holds: its affirmation `P⁺` is inhabited. -/
+abbrev Holds (P : AProp.{u}) : Type u := P.pos
 
-/-- `P` is refuted: its negative part `P⁻` is provable. -/
-def Refuted (P : AProp) : Prop := P.neg
+/-- `P` is refuted: its refutation `P⁻` is inhabited. -/
+abbrev Refuted (P : AProp.{u}) : Type u := P.neg
 
-/-- Affine entailment `P ⊢ Q`, a Chu morphism `(P⁺ → Q⁺) ∧ (Q⁻ → P⁻)`. -/
-def Entails (P Q : AProp) : Prop := (P.pos → Q.pos) ∧ (Q.neg → P.neg)
+/-- Affine entailment as data: affirmation forwards, refutation backwards. -/
+@[aesop norm unfold]
+def Entails (P : AProp.{u}) (Q : AProp.{v}) : Type (max u v) :=
+  (P.pos → Q.pos) × (Q.neg → P.neg)
 
 @[inherit_doc] scoped infix:50 " ⊢ " => Entails
 
-@[simp] theorem holds_def (P : AProp) : Holds P ↔ P.pos := Iff.rfl
-@[simp] theorem refuted_def (P : AProp) : Refuted P ↔ P.neg := Iff.rfl
-@[simp] theorem entails_def (P Q : AProp) :
-    Entails P Q ↔ (P.pos → Q.pos) ∧ (Q.neg → P.neg) := Iff.rfl
+/-- Entailment is, definitionally, the validity of linear implication. -/
+theorem entails_eq_holds_limp (P Q : AProp.{u}) : (P ⊢ Q) = Holds (P.limp Q) := rfl
 
-/-- Entailment is exactly the validity of linear implication. -/
-theorem entails_iff_holds_limp (P Q : AProp) : Entails P Q ↔ Holds (P.limp Q) := Iff.rfl
+namespace Entails
 
-/-! ## Entailment is a preorder -/
+/-- Identity entailment. -/
+def refl (P : AProp.{u}) : P ⊢ P := ⟨id, id⟩
 
-@[refl] theorem Entails.refl (P : AProp) : P ⊢ P := ⟨id, id⟩
-
-theorem Entails.trans {P Q R : AProp} (h₁ : P ⊢ Q) (h₂ : Q ⊢ R) : P ⊢ R :=
+/-- Composition / cut (composes the underlying realizers). -/
+def trans {P : AProp.{u}} {Q : AProp.{v}} {R : AProp.{w}} (h₁ : P ⊢ Q) (h₂ : Q ⊢ R) : P ⊢ R :=
   ⟨fun hp => h₂.1 (h₁.1 hp), fun hr => h₁.2 (h₂.2 hr)⟩
 
-instance : Trans Entails Entails Entails where
-  trans := Entails.trans
+end Entails
 
-/-! ## Sanity checks: hand proofs validating the connective definitions
-
-(Replaced by the `antithesis` tactic later — these are here to confirm the
-math is right.) -/
-
-section Sanity
-variable (P Q : AProp)
-
-/-- Affine weakening for `⊗` (needs exclusivity of `P`). -/
-example : P.tensor Q ⊢ P :=
-  ⟨fun ⟨hp, _⟩ => hp,
-   fun hpn => ⟨fun hpp => absurd hpn (fun h => P.excl hpp h), fun _ => hpn⟩⟩
-
-/-- `⊕`-introduction. -/
-example : P ⊢ P.plus Q := ⟨fun hp => Or.inl hp, fun ⟨hpn, _⟩ => hpn⟩
-
-/-- De Morgan: `(P ⊗ Q)ᗮ = Pᗮ ⅋ Qᗮ`, definitionally. -/
-example : (P.tensor Q).perp = (P.perp.par Q.perp) := rfl
-
-/-- De Morgan: `(P ⊓ Q)ᗮ = Pᗮ ⊔ Qᗮ`, definitionally. -/
-example : (P.with' Q).perp = (P.perp.plus Q.perp) := rfl
-
-end Sanity
+/-- `calc` support for `⊢` (single universe). -/
+instance : Trans (α := AProp.{u}) (β := AProp.{u}) (γ := AProp.{u}) Entails Entails Entails :=
+  ⟨Entails.trans⟩
 
 end Antithesis

@@ -6,32 +6,30 @@ Authors: tailcalled
 import LeanAntithesis.Entail
 
 /-!
-# Lifting ordinary propositions into the antithesis interpretation
+# Lifting evidence into the antithesis interpretation
 
-The canonical embedding sends an intuitionistic proposition `p` to the affine
-proposition `(p, ¬p)`: affirmation is `p`, refutation is its negation.  This is
-the obvious atom whose refutation carries no extra constructive content.
+`lift A` turns a `Type` of evidence `A` into the affine proposition "`A` is
+inhabited", with affirmation the truncation `Trunc' A` and refutation
+`Trunc' A → Empty`.  Truncating makes the components propositions (subsingletons)
+for *any* `A`, so `lift` is total; the witness in `A` is still recoverable into
+subsingletons via unique choice.
 
-Mathematical atoms often have a *stronger* refutation than `¬p` (e.g. equality
-refuted by apartness `#`, rather than by `≠`).  Those are built directly with
-the `AProp` constructor `⟨pos, neg, h⟩`, supplying the proof that the chosen
-refutation is incompatible with the affirmation. -/
+`liftProp p` lifts an ordinary Lean `Prop`.
+-/
+
+universe u
 
 namespace Antithesis
 namespace AProp
 
-/-- Canonical lift of an ordinary proposition: `lift p = (p, ¬p)`. -/
-def lift (p : Prop) : AProp := ⟨p, ¬p, fun hp hnp => hnp hp⟩
+/-- Lift a type of evidence to the affine proposition "`A` is inhabited". -/
+def lift (A : Type u) : AProp.{u} := ⟨Trunc' A, Trunc' A → Empty, fun t f => f t⟩
 
-@[simp] theorem lift_pos (p : Prop) : (lift p).pos = p := rfl
-@[simp] theorem lift_neg (p : Prop) : (lift p).neg = ¬p := rfl
+@[simp] theorem lift_pos (A : Type u) : (lift A).pos = Trunc' A := rfl
+@[simp] theorem lift_neg (A : Type u) : (lift A).neg = (Trunc' A → Empty) := rfl
 
-@[simp] theorem holds_lift (p : Prop) : Holds (lift p) ↔ p := Iff.rfl
-@[simp] theorem refuted_lift (p : Prop) : Refuted (lift p) ↔ ¬p := Iff.rfl
-
-/-- `lift` of `True`/`False` are the affine units. -/
-@[simp] theorem lift_true : lift True = top := by ext <;> simp [top]
-@[simp] theorem lift_false : lift False = bot := by ext <;> simp [bot]
+/-- Lift an ordinary Lean proposition. -/
+def liftProp (p : Prop) : AProp.{0} := lift (PLift p)
 
 end AProp
 end Antithesis

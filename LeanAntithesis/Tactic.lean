@@ -3,72 +3,48 @@ Copyright (c) 2026 tailcalled. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: tailcalled
 -/
-import LeanAntithesis.Syntax
-import Mathlib.Tactic.ITauto
+import LeanAntithesis.Entail
 
 /-!
-# The `antithesis` solver tactic
+# The `antithesis` solver
 
-`antithesis` discharges goals about affine propositions — entailments `P ⊢ Q`,
-validity `Holds P`, refutations `Refuted P`, or raw `.pos`/`.neg` claims — by:
+Affine goals are now `Type`-inhabitation problems (build a realizer), so the
+solver is `aesop`-based rather than a propositional decision procedure.  Two
+rules close the gap that plain `aesop` leaves:
 
-1. adding the exclusivity fact `x⁺ → x⁻ → False` for every atom `x : AProp`
-   in context (this is the bookkeeping you'd otherwise do by hand);
-2. unfolding the affine connectives down to ordinary intuitionistic logic via
-   the `@[simp]` projection lemmas;
-3. closing the resulting goal with `itauto` (intuitionistic propositional
-   logic — *not* classical `tauto`, so anything proved is constructively valid).
+* `Trunc'.mk` as a safe `apply` rule — to introduce a propositional truncation;
+* `excl` as a safe `forward` rule — to derive `Empty` from joint evidence.
 
-Goals involving the affine quantifiers `⨅`/`⨆` may need manual `intro`/witness
-steps before `antithesis` finishes the propositional part.
+The connectives and `Entails` are tagged `@[aesop norm unfold]`, so `aesop`
+unfolds the affine structure automatically before searching.  Unlike the old
+`itauto`-based version this *constructs* the realizer, so anything it proves
+carries computational content.
 -/
 
-open Lean Elab Tactic Meta
+universe u w
 
 namespace Antithesis
 
-/-! `antithesis_excls` surfaces atom exclusivity (`x⁺ → x⁻ → False`) for every
-`AProp` appearing in the goal, so the propositional solver can use it. -/
+-- Introduce a truncation (the `aesop` move plain search is missing).
+attribute [aesop safe apply] Trunc'.mk
 
-/-- Collect every closed `AProp`-typed subterm of `e` (atoms and compounds
-alike); their exclusivity facts are what the propositional solver needs.  We do
-not descend under binders, to avoid loose bound variables. -/
-private partial def collectAPropAtoms (e : Expr) (acc : Array Expr) : MetaM (Array Expr) := do
-  let mut acc := acc
-  if !e.hasLooseBVars then
-    if (← inferType e).cleanupAnnotations.isConstOf ``AProp then
-      unless acc.any (· == e) do acc := acc.push e
-  match e with
-  | .app f a => collectAPropAtoms a (← collectAPropAtoms f acc)
-  | .mdata _ b => collectAPropAtoms b acc
-  | .proj _ _ b => collectAPropAtoms b acc
-  | _ => return acc
+/-- From joint evidence, derive `Empty` (so `aesop` can close by contradiction). -/
+@[aesop safe forward]
+def AProp.exclForward {P : AProp.{u}} (hp : P.pos) (hn : P.neg) : Empty := P.excl hp hn
 
-elab "antithesis_excls" : tactic => do
-  liftMetaTactic fun mvarId => mvarId.withContext do
-    let atoms ← collectAPropAtoms (← mvarId.getType) #[]
-    let mut g := mvarId
-    for a in atoms, i in [0:atoms.size] do
-      let proof ← mkAppM ``AProp.excl #[a]
-      let (_, g') ← g.note (Name.mkSimple s!"excl{i}") proof
-      g := g'
-    return [g]
+/-- Build a realizer for an affine goal (`⊢`, `Holds`, `.pos`/`.neg`, …).
 
-/-- Reduce an affine goal to intuitionistic logic and solve it.
-
-See the module docstring for the procedure. -/
-macro "antithesis" : tactic =>
-  `(tactic|
-    (antithesis_excls
-     try simp only [Holds, Refuted, Entails, holds_def, refuted_def, entails_def,
-       AProp.top_pos, AProp.top_neg, AProp.bot_pos, AProp.bot_neg,
-       AProp.perp_pos, AProp.perp_neg,
-       AProp.with_pos, AProp.with_neg, AProp.plus_pos, AProp.plus_neg,
-       AProp.tensor_pos, AProp.tensor_neg, AProp.par_pos, AProp.par_neg,
-       AProp.limp_pos, AProp.limp_neg, AProp.bang_pos, AProp.bang_neg,
-       AProp.quest_pos, AProp.quest_neg,
-       AProp.all_pos, AProp.all_neg, AProp.ex_pos, AProp.ex_neg,
-       AProp.lift_pos, AProp.lift_neg, toAProp_aprop, toAProp_prop] at *
-     itauto))
+First reduces `.pos`/`.neg` through the connectives to plain
+`×`/`⊕`/`Trunc'`/`→`/`PUnit` over atoms, then lets `aesop` construct the term. -/
+macro "antithesis" : tactic => `(tactic|
+  (try simp only [Entails, Holds, Refuted,
+        AProp.top_pos, AProp.top_neg, AProp.bot_pos, AProp.bot_neg,
+        AProp.perp_pos, AProp.perp_neg, AProp.tensor_pos, AProp.tensor_neg,
+        AProp.par_pos, AProp.par_neg, AProp.limp_pos, AProp.limp_neg,
+        AProp.with_pos, AProp.with_neg, AProp.plus_pos, AProp.plus_neg,
+        AProp.bang_pos, AProp.bang_neg, AProp.quest_pos, AProp.quest_neg,
+        AProp.all_pos, AProp.all_neg, AProp.ex_pos, AProp.ex_neg,
+        AProp.lift_pos, AProp.lift_neg] at *
+   aesop))
 
 end Antithesis

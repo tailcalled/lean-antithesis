@@ -25,17 +25,19 @@ Example: `⟬ ∀ x, ⟪P x⟫ ⊗ Q ⊸ ⟪x = y⟫ ⟭`.
 namespace Antithesis
 open Lean
 
+universe u v
+
 /-- Coercion of a Lean value into an `AProp`: an `AProp` is itself; a `Prop` is
-lifted to `(p, ¬p)`.  This is what atom positions in `⟬ ⟭` elaborate through. -/
-class ToAProp (α : Sort _) where
+lifted.  This is what atom positions in `⟬ ⟭` elaborate through. -/
+class ToAProp (α : Sort v) where
   /-- Interpret `a` as an affine proposition. -/
-  toAProp : α → AProp
+  toAProp : α → AProp.{u}
 
-instance : ToAProp AProp := ⟨id⟩
-instance : ToAProp Prop := ⟨AProp.lift⟩
+instance : ToAProp (AProp.{u}) := ⟨fun P => P⟩
+instance : ToAProp Prop := ⟨AProp.liftProp⟩
 
-@[simp] theorem toAProp_aprop (P : AProp) : (ToAProp.toAProp P : AProp) = P := rfl
-@[simp] theorem toAProp_prop (p : Prop) : (ToAProp.toAProp p : AProp) = AProp.lift p := rfl
+@[simp] theorem toAProp_aprop (P : AProp.{u}) : (ToAProp.toAProp P : AProp.{u}) = P := rfl
+@[simp] theorem toAProp_prop (p : Prop) : (ToAProp.toAProp p : AProp.{0}) = AProp.liftProp p := rfl
 
 /-! ## The `aprop` grammar -/
 

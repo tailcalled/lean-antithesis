@@ -5,8 +5,7 @@ Authors: tailcalled
 -/
 import LeanAntithesis.Tactic
 
-/-! Regression tests / demos for the `antithesis` tactic.  Every law here is
-intuitionistically valid in affine logic. -/
+/-! Regression tests / demos for the `antithesis` solver (Type-valued). -/
 
 namespace Antithesis
 open scoped Antithesis
@@ -16,15 +15,13 @@ variable (P Q R : AProp)
 -- Preorder
 example : P ⊢ P := by antithesis
 
--- Additive projections (with)
+-- Additive projections / injections
 example : P ⊓ Q ⊢ P := by antithesis
 example : P ⊓ Q ⊢ Q := by antithesis
-
--- Additive injections (plus)
 example : P ⊢ P ⊔ Q := by antithesis
 example : Q ⊢ P ⊔ Q := by antithesis
 
--- Multiplicative weakening (affine!) — needs atom exclusivity
+-- Multiplicative weakening (affine)
 example : P ⊗ Q ⊢ P := by antithesis
 example : P ⊗ Q ⊢ Q := by antithesis
 
@@ -32,23 +29,30 @@ example : P ⊗ Q ⊢ Q := by antithesis
 example : P ⊗ Q ⊢ Q ⊗ P := by antithesis
 example : P ⅋ Q ⊢ Q ⅋ P := by antithesis
 
--- Exponentials: dereliction and its dual
+-- Exponentials
 example : ！P ⊢ P := by antithesis
 example : P ⊢ ？P := by antithesis
 
--- De Morgan dualities, both directions, via entailment
+-- De Morgan, both directions
 example : (P ⊗ Q)ᗮ ⊢ Pᗮ ⅋ Qᗮ := by antithesis
 example : Pᗮ ⅋ Qᗮ ⊢ (P ⊗ Q)ᗮ := by antithesis
 example : (P ⊓ Q)ᗮ ⊢ Pᗮ ⊔ Qᗮ := by antithesis
 example : Pᗮ ⊔ Qᗮ ⊢ (P ⊓ Q)ᗮ := by antithesis
 
--- Linear distributivity of ⊗ over ⊔
-example : P ⊗ (Q ⊔ R) ⊢ (P ⊗ Q) ⊔ (P ⊗ R) := by antithesis
+-- Distributivity of ⊗ over ⊔ — valid because components are subsingletons,
+-- so a truncated disjunction eliminates into them (`Trunc'.elimProp`).
+example : P ⊗ (Q ⊔ R) ⊢ (P ⊗ Q) ⊔ (P ⊗ R) := by
+  refine ⟨?_, ?_⟩
+  · rintro ⟨hp, t⟩
+    refine Trunc'.elimProp (fun s => ?_) t
+    rcases s with hq | hr
+    · exact Trunc'.mk (.inl ⟨hp, hq⟩)
+    · exact Trunc'.mk (.inr ⟨hp, hr⟩)
+  · rintro ⟨⟨pq1, pq2⟩, ⟨pr1, pr2⟩⟩
+    exact ⟨fun hp => ⟨pq1 hp, pr1 hp⟩, Trunc'.elimProp (Sum.elim pq2 pr2)⟩
 
--- Contraposition of linear implication
+-- Contraposition; modus ponens as a tensor
 example : P ⊸ Q ⊢ Qᗮ ⊸ Pᗮ := by antithesis
-
--- Modus ponens as a tensor: P ⊗ (P ⊸ Q) ⊢ Q
 example : P ⊗ (P ⊸ Q) ⊢ Q := by antithesis
 
 end Antithesis

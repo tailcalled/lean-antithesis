@@ -35,10 +35,6 @@ partial def parseCtx (e : Expr) : Array (Expr × Expr) :=
   | (``LCtx.cons, #[nm, res, rest]) => #[(nm, res)] ++ parseCtx rest
   | _ => #[]
 
-/-- Rebuild an `LCtx` expression from `(name, resource)` entries. -/
-def buildCtx (pairs : Array (Expr × Expr)) : Expr :=
-  pairs.foldr (fun p acc => mkApp3 (.const ``LCtx.cons []) p.1 p.2 acc) (.const ``LCtx.nil [])
-
 /-- Recover the `String` from a name literal expression. -/
 def nameOf? : Expr → Option String
   | .lit (.strVal s) => some s
@@ -50,19 +46,6 @@ def getSeqGoal : TacticM (Array (Expr × Expr) × Expr) := do
   | (``Seq, #[Γ, G]) => return (parseCtx Γ, G)
   | _ => throwError "not a `linear` goal (expected `Seq Γ G`); run `linear` first"
 
-/-- Peel `k` tensor factors off a resource (the last factor keeps the remainder). -/
-partial def peelTensor (e : Expr) (k : Nat) : TacticM (Array Expr) := do
-  if k ≤ 1 then return #[e]
-  match e.getAppFnArgs with
-  | (``AProp.tensor, #[a, b]) => return #[a] ++ (← peelTensor b (k - 1))
-  | _ => throwError "cannot split resource into {k} parts: it is not a tensor"
-
-/-- Reshape the context to `Γ'`, discharging the propositional side condition. -/
-def reshapeTo (entries : Array (Expr × Expr)) : TacticM Unit := do
-  let Γ'stx ← (buildCtx entries).toSyntax
-  evalTactic (← `(tactic|
-    refine Seq.changeCtx (Γ' := $Γ'stx) (by simp only [LCtx.interp]; antithesis) ?_))
-
 /-- Enter linear proof mode from a bare entailment `A ⊢ G`. -/
 elab "linear" : tactic => do
   match (← getMainTarget).getAppFnArgs with
@@ -70,24 +53,43 @@ elab "linear" : tactic => do
   | (``Entails, _) => evalTactic (← `(tactic| refine Seq.ofEntails (n := "this") ?_))
   | _ => throwError "`linear` expects a goal of the form `A ⊢ G`"
 
-/-- Split the head resource's tensor spine, naming each component. -/
+/-- Name the head resource (1 name) or split a head `⊗` into two named pieces. -/
 elab "lintro" names:(colGt ident)+ : tactic => do
-  let (Γ, _) ← getSeqGoal
+  let (Γ, G) ← getSeqGoal
   if Γ.isEmpty then throwError "no resource to introduce"
-  let nameStrs := names.map (·.getId.toString)
-  let leaves ← peelTensor Γ[0]!.2 nameStrs.size
-  let newHead := (nameStrs.zip leaves).map (fun p => (mkStrLit p.1, p.2))
-  reshapeTo (newHead ++ Γ[1:].toArray)
+  let ns := names.map (·.getId.toString)
+  match ns.size with
+  | 1 =>
+    -- surgically rename the head resource (preserving universes), then `change`
+    match (← getMainTarget).getAppFnArgs with
+    | (``Seq, #[Γraw, _]) =>
+      match Γraw.getAppFnArgs with
+      | (``LCtx.cons, #[_, res, rest]) =>
+        let newΓ := mkAppN Γraw.getAppFn #[mkStrLit ns[0]!, res, rest]
+        let Γstx ← newΓ.toSyntax
+        let Gstx ← G.toSyntax
+        evalTactic (← `(tactic| change Seq $Γstx $Gstx))
+      | _ => throwError "no head resource to name"
+    | _ => throwError "not in linear mode"
+  | 2 =>
+    let n₁ := Syntax.mkStrLit ns[0]!
+    let n₂ := Syntax.mkStrLit ns[1]!
+    evalTactic (← `(tactic| refine Seq.split (n₁ := $n₁) (n₂ := $n₂) ?_))
+  | k => throwError "lintro currently supports 1 or 2 names (got {k})"
+
+/-- Find a resource by name; return its index (0 = head). -/
+def findRes (target : String) : TacticM Nat := do
+  let (Γ, _) ← getSeqGoal
+  match Γ.findIdx? (fun p => nameOf? p.1 == some target) with
+  | some i => return i
+  | none => throwError "no resource named `{target}`"
 
 /-- Instantiate a `⨅`-resource `h` at witness `a`. -/
 elab "lspecialize" h:(colGt ident) a:(colGt term) : tactic => do
-  let (Γ, _) ← getSeqGoal
-  let target := h.getId.toString
-  let some i := Γ.findIdx? (fun p => nameOf? p.1 == some target)
-    | throwError "no resource named `{target}`"
-  -- bring `h` to the head, then apply the ∀-left rule there
-  reshapeTo (#[Γ[i]!] ++ Γ.eraseIdxIfInBounds i)
-  evalTactic (← `(tactic| refine Seq.specialize $a ?_))
+  match ← findRes h.getId.toString with
+  | 0 => evalTactic (← `(tactic| refine Seq.specialize $a ?_))
+  | 1 => evalTactic (← `(tactic| refine Seq.swap ?_; refine Seq.specialize $a ?_))
+  | i => throwError "resource is at depth {i}; only head/second supported"
 
 /-- Provide a witness `a` for a `⨆`-goal. -/
 elab "lexists" a:(colGt term) : tactic => do
@@ -95,15 +97,15 @@ elab "lexists" a:(colGt term) : tactic => do
 
 /-- Discard the resource named `h` (affine weakening). -/
 elab "lweaken" h:(colGt ident) : tactic => do
-  let (Γ, _) ← getSeqGoal
-  let target := h.getId.toString
-  let some i := Γ.findIdx? (fun p => nameOf? p.1 == some target)
-    | throwError "no resource named `{target}`"
-  reshapeTo (Γ.eraseIdxIfInBounds i)
+  match ← findRes h.getId.toString with
+  | 0 => evalTactic (← `(tactic| refine Seq.weaken ?_))
+  | 1 => evalTactic (← `(tactic| refine Seq.swap ?_; refine Seq.weaken ?_))
+  | i => throwError "resource is at depth {i}; only head/second supported"
 
-/-- Finish a linear proof: discharge the propositional residue with the solver. -/
+/-- Finish a linear proof: strip the context's units and let the solver build
+the realizer. -/
 macro "lclose" : tactic =>
-  `(tactic| (refine Seq.close ?_; simp only [LCtx.interp]; antithesis))
+  `(tactic| (refine Seq.closeClean ?_; simp only [LCtx.clean]; antithesis))
 
 /-! ## Pretty-printing the linear goal
 

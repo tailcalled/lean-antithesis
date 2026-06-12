@@ -6,145 +6,125 @@ Authors: tailcalled
 import LeanAntithesis.Tactic
 
 /-!
-# The affine sequent calculus, as composable entailment rules
+# The affine sequent calculus, as composable entailment realizers
 
-Every rule here is a lemma about `⊢`, proven sound against *both* components of
-the Chu morphism (affirmation forward, refutation backward) once and for all.
-Proofs built by composing these rules — with `Entails.trans` as cut and `calc`
-for chaining — therefore handle the refutation side automatically.
-
-The judgement is single-conclusion `Γ ⊢ B` (read `⊗Γ ⊢ B`); full classical
-power is recovered when needed via `dualize` (`P ⊢ Q ↔ Qᗮ ⊢ Pᗮ`), which turns
-right-hand reasoning into left-hand reasoning using the involutive negation.
-
-These rules also form the categorical structure: `⊗` is a symmetric monoidal
-bifunctor, `⊓`/`⊔` are product/coproduct, `⊸` is the internal hom, and the
-quantifiers are adjoints to weakening.
+Each rule is a `def` producing the entailment *data* (a realizer).  Structural
+rules are built by the `antithesis` solver; the additive **elimination** rules
+(`⊓`-intro, `⊔`-elim, `⨅`-intro, `⨆`-elim) eliminate a truncated position into a
+subsingleton component and so are built with `Trunc'.elimProp`.
 -/
+
+universe u v w
 
 namespace Antithesis
 open scoped Antithesis
 
-variable {P P' Q Q' R : AProp}
+variable {P P' Q Q' R : AProp.{u}}
 
 /-! ## Cut and duality -/
 
-/-- Cut / composition (also a `Trans` instance, so usable in `calc`). -/
-theorem cut (h₁ : P ⊢ Q) (h₂ : Q ⊢ R) : P ⊢ R := h₁.trans h₂
+/-- Cut / composition (universe-polymorphic, for relating different levels). -/
+def cut {P : AProp.{u}} {Q : AProp.{v}} {R : AProp.{w}} (h₁ : P ⊢ Q) (h₂ : Q ⊢ R) : P ⊢ R :=
+  Entails.trans h₁ h₂
 
-/-- Contraposition: reasoning on the right is reasoning on the left of the
-dual.  This is what replaces two-sided sequents. -/
-theorem dualize : (P ⊢ Q) ↔ (Qᗮ ⊢ Pᗮ) := by antithesis
+/-- Contraposition: an entailment yields one between the duals. -/
+def perp_mono (h : P ⊢ Q) : Qᗮ ⊢ Pᗮ := ⟨h.2, h.1⟩
 
-theorem perp_mono (h : P ⊢ Q) : Qᗮ ⊢ Pᗮ := dualize.mp h
+/-- The reverse of `perp_mono` (used by the `ldualize` tactic). -/
+def dualizeRev (h : Qᗮ ⊢ Pᗮ) : P ⊢ Q := ⟨h.2, h.1⟩
 
-/-! ## Multiplicative: tensor `⊗`, par `⅋`, implication `⊸` -/
+/-! ## Multiplicative -/
 
-theorem tensor_mono (h₁ : P ⊢ P') (h₂ : Q ⊢ Q') : P ⊗ Q ⊢ P' ⊗ Q' := by antithesis
-theorem tensor_comm : P ⊗ Q ⊢ Q ⊗ P := by antithesis
-theorem tensor_assoc : (P ⊗ Q) ⊗ R ⊢ P ⊗ (Q ⊗ R) := by antithesis
-theorem tensor_unit : P ⊗ AProp.top ⊢ P := by antithesis
-theorem unit_tensor : P ⊢ P ⊗ AProp.top := by antithesis
-
-/-- Affine weakening: resources may be discarded. -/
-theorem tensor_weaken : P ⊗ Q ⊢ P := by antithesis
-
+def tensor_mono (h₁ : P ⊢ P') (h₂ : Q ⊢ Q') : P ⊗ Q ⊢ P' ⊗ Q' := by antithesis
+def tensor_comm : P ⊗ Q ⊢ Q ⊗ P := by antithesis
+def tensor_assoc : (P ⊗ Q) ⊗ R ⊢ P ⊗ (Q ⊗ R) :=
+  ⟨fun ⟨⟨a, b⟩, c⟩ => ⟨a, b, c⟩,
+   fun x => ⟨fun ⟨hp, hq⟩ => (x.1 hp).1 hq,
+             fun hr => ⟨fun hp => (x.1 hp).2 hr, fun hq => x.2 ⟨hq, hr⟩⟩⟩⟩
+def tensor_assoc' : P ⊗ (Q ⊗ R) ⊢ (P ⊗ Q) ⊗ R :=
+  ⟨fun ⟨a, b, c⟩ => ⟨⟨a, b⟩, c⟩,
+   fun x => ⟨fun hp => ⟨fun hq => x.1 ⟨hp, hq⟩, fun hr => (x.2 hr).1 hp⟩,
+             fun ⟨hq, hr⟩ => (x.2 hr).2 hq⟩⟩
+def tensor_unit : P ⊗ AProp.top ⊢ P := by antithesis
+def unit_tensor : P ⊢ P ⊗ AProp.top := by antithesis
+/-- Affine weakening. -/
+def tensor_weaken : P ⊗ Q ⊢ P := by antithesis
 /-- Evaluation / linear modus ponens. -/
-theorem eval : (P ⊸ Q) ⊗ P ⊢ Q := by antithesis
+def eval : (P ⊸ Q) ⊗ P ⊢ Q := by antithesis
+/-- The `⊗ ⊣ ⊸` adjunction. -/
+def curry (h : P ⊗ Q ⊢ R) : P ⊢ Q ⊸ R :=
+  ⟨fun hp => ⟨fun hq => h.1 ⟨hp, hq⟩, fun hrn => (h.2 hrn).1 hp⟩,
+   fun ⟨hq, hrn⟩ => (h.2 hrn).2 hq⟩
+def uncurry (h : P ⊢ Q ⊸ R) : P ⊗ Q ⊢ R :=
+  ⟨fun ⟨hp, hq⟩ => (h.1 hp).1 hq,
+   fun hrn => ⟨fun hp => (h.1 hp).2 hrn, fun hq => h.2 ⟨hq, hrn⟩⟩⟩
+def limp_mono (h₁ : P' ⊢ P) (h₂ : Q ⊢ Q') : (P ⊸ Q) ⊢ (P' ⊸ Q') := by antithesis
 
-/-- The `⊗ ⊣ ⊸` adjunction (currying). -/
-theorem curry (h : P ⊗ Q ⊢ R) : P ⊢ Q ⊸ R := by antithesis
-theorem uncurry (h : P ⊢ Q ⊸ R) : P ⊗ Q ⊢ R := by antithesis
+/-! ## Additive -/
 
-theorem limp_mono (h₁ : P' ⊢ P) (h₂ : Q ⊢ Q') : (P ⊸ Q) ⊢ (P' ⊸ Q') := by antithesis
+def with_fst : P ⊓ Q ⊢ P := by antithesis
+def with_snd : P ⊓ Q ⊢ Q := by antithesis
+/-- `⊓`-introduction (eliminates the truncated `⊔` in the refutation). -/
+def with_intro (h₁ : R ⊢ P) (h₂ : R ⊢ Q) : R ⊢ P ⊓ Q :=
+  ⟨fun hr => ⟨h₁.1 hr, h₂.1 hr⟩, Trunc'.elimProp (Sum.elim h₁.2 h₂.2)⟩
 
-/-! ## Additive: with `⊓` (product), plus `⊔` (coproduct) -/
-
-theorem with_fst : P ⊓ Q ⊢ P := by antithesis
-theorem with_snd : P ⊓ Q ⊢ Q := by antithesis
-theorem with_intro (h₁ : R ⊢ P) (h₂ : R ⊢ Q) : R ⊢ P ⊓ Q := by antithesis
-
-theorem plus_inl : P ⊢ P ⊔ Q := by antithesis
-theorem plus_inr : Q ⊢ P ⊔ Q := by antithesis
-theorem plus_elim (h₁ : P ⊢ R) (h₂ : Q ⊢ R) : P ⊔ Q ⊢ R := by antithesis
-
-/-! ## Exponential -/
+def plus_inl : P ⊢ P ⊔ Q := by antithesis
+def plus_inr : Q ⊢ P ⊔ Q := by antithesis
+/-- `⊔`-elimination (the fundamental rule for *using* a disjunction). -/
+def plus_elim (h₁ : P ⊢ R) (h₂ : Q ⊢ R) : P ⊔ Q ⊢ R :=
+  ⟨Trunc'.elimProp (Sum.elim h₁.1 h₂.1), fun hr => ⟨h₁.2 hr, h₂.2 hr⟩⟩
 
 /-- Dereliction `!P ⊢ P`. -/
-theorem derelict : AProp.bang P ⊢ P := by antithesis
+def derelict : AProp.bang P ⊢ P := by antithesis
 
-/-! ## Quantifiers (predicate logic)
+/-! ## Quantifiers -/
 
-`⨅`/`⨆` are right/left adjoint to weakening; these are the intro/elim rules.
-The propositional solver cannot do instantiation, so these are proved by hand. -/
+variable {α : Type v} {B : α → AProp.{u}}
 
-variable {α : Sort*} {B : α → AProp}
+def all_elim (a : α) : AProp.all B ⊢ B a :=
+  ⟨fun f => f a, fun hn => Trunc'.mk ⟨a, hn⟩⟩
 
-/-- `⨅`-elimination (instantiation at `a`). -/
-theorem all_elim (a : α) : AProp.all B ⊢ B a := ⟨fun h => h a, fun hn => ⟨a, hn⟩⟩
+def all_intro {R : AProp.{w}} (h : ∀ x, R ⊢ B x) : R ⊢ AProp.all B :=
+  ⟨fun hr x => (h x).1 hr, Trunc'.elimProp (fun p => (h p.1).2 p.2)⟩
 
-/-- `⨅`-introduction: prove the body uniformly in a fresh variable. -/
-theorem all_intro (h : ∀ x, R ⊢ B x) : R ⊢ AProp.all B :=
-  ⟨fun hr x => (h x).1 hr, fun ⟨x, hx⟩ => (h x).2 hx⟩
+def ex_intro (a : α) : B a ⊢ AProp.ex B :=
+  ⟨fun hp => Trunc'.mk ⟨a, hp⟩, fun f => f a⟩
 
-/-- `⨆`-introduction (witness `a`). -/
-theorem ex_intro (a : α) : B a ⊢ AProp.ex B := ⟨fun h => ⟨a, h⟩, fun h => h a⟩
+def ex_elim {R : AProp.{w}} (h : ∀ x, B x ⊢ R) : AProp.ex B ⊢ R :=
+  ⟨Trunc'.elimProp (fun p => (h p.1).1 p.2), fun hr x => (h x).2 hr⟩
 
-/-- `⨆`-elimination: handle the body uniformly in a fresh variable. -/
-theorem ex_elim (h : ∀ x, B x ⊢ R) : AProp.ex B ⊢ R :=
-  ⟨fun ⟨x, hx⟩ => (h x).1 hx, fun hr x => (h x).2 hr⟩
+def all_mono {B B' : α → AProp.{u}} (h : ∀ x, B x ⊢ B' x) : AProp.all B ⊢ AProp.all B' :=
+  all_intro fun x => cut (all_elim x) (h x)
 
-theorem all_mono {B B' : α → AProp} (h : ∀ x, B x ⊢ B' x) : AProp.all B ⊢ AProp.all B' :=
-  all_intro fun x => (all_elim x).trans (h x)
+def ex_mono {B B' : α → AProp.{u}} (h : ∀ x, B x ⊢ B' x) : AProp.ex B ⊢ AProp.ex B' :=
+  ex_elim fun x => cut (h x) (ex_intro x)
 
-theorem ex_mono {B B' : α → AProp} (h : ∀ x, B x ⊢ B' x) : AProp.ex B ⊢ AProp.ex B' :=
-  ex_elim fun x => (h x).trans (ex_intro x)
+/-! ## Proof-driving tactics -/
 
-/-! ## Proof-driving tactics
-
-Thin, always-sound wrappers over the rules above (each reduces to a proven
-lemma, so they cannot produce an invalid proof). -/
-
-/-- `lcut B` proves the goal `P ⊢ R` through an intermediate `B`, leaving the
-two subgoals `P ⊢ B` and `B ⊢ R`. This is the cut rule as backward chaining. -/
+/-- `lcut B` proves `P ⊢ R` through an intermediate `B`. -/
 macro "lcut " B:term : tactic => `(tactic| refine cut (Q := $B) ?_ ?_)
 
-/-- `ldualize` contraposes the goal `P ⊢ Q` into `Qᗮ ⊢ Pᗮ`, so right-hand
-reasoning becomes left-hand reasoning. -/
-macro "ldualize" : tactic => `(tactic| rw [dualize])
+/-- `ldualize` reduces the goal `P ⊢ Q` to `Qᗮ ⊢ Pᗮ`. -/
+macro "ldualize" : tactic => `(tactic| refine dualizeRev ?_)
 
 /-! ## Demonstrations -/
 
 section Demo
-variable (P Q : AProp) (α : Sort*) (S T : α → AProp)
+variable (P Q : AProp.{u}) (α : Type v) (S T : α → AProp.{u})
 
-/-- `calc` chaining of rules (cut is the `Trans` instance). -/
+/-- `calc` chaining. -/
 example : P ⊗ (P ⊸ Q) ⊢ Q :=
   calc P ⊗ (P ⊸ Q)
       _ ⊢ (P ⊸ Q) ⊗ P := tensor_comm
       _ ⊢ Q            := eval
 
-/-- A genuine predicate-logic entailment the solver can't do alone:
-`(⨅ x, S x ⊓ T x) ⊢ (⨅ x, S x)`. -/
+/-- Predicate logic: `(⨅ x, S x ⊓ T x) ⊢ ⨅ x, S x`. -/
 example : AProp.all (fun x => S x ⊓ T x) ⊢ AProp.all S :=
-  all_intro fun x => (all_elim x).trans with_fst
+  all_intro fun x => cut (all_elim x) with_fst
 
-/-- Existential distributes out of `⊔`: `(⨆ x, S x) ⊢ ⨆ x, (S x ⊔ T x)`. -/
+/-- `(⨆ x, S x) ⊢ ⨆ x, (S x ⊔ T x)`. -/
 example : AProp.ex S ⊢ AProp.ex (fun x => S x ⊔ T x) :=
   ex_mono fun _ => plus_inl
-
-/-- Same modus ponens, driven by the `lcut` tactic instead of `calc`. -/
-example : P ⊗ (P ⊸ Q) ⊢ Q := by
-  lcut ((P ⊸ Q) ⊗ P)
-  · exact tensor_comm
-  · exact eval
-
-/-- Using `ldualize` to attack the refutation side: `(P ⊸ Q) ⊢ (Qᗮ ⊸ Pᗮ)`
-becomes, after dualizing, the structurally identical goal on the duals. -/
-example : (P ⊸ Q) ⊢ (Qᗮ ⊸ Pᗮ) := by
-  ldualize
-  -- goal is now `(Qᗮ ⊸ Pᗮ)ᗮ ⊢ (P ⊸ Q)ᗮ`; the solver finishes the propositional core
-  antithesis
 
 end Demo
 

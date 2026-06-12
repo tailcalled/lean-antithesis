@@ -4,18 +4,17 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: tailcalled
 -/
 import LeanAntithesis.Tactic
+import LeanAntithesis.Calculus
+import LeanAntithesis.Syntax
 
 /-!
-# Examples
+# Examples (Type-valued)
 
-Two things are demonstrated here:
-
-1. the surface syntax `⟬ ⟭` and the `antithesis` tactic on concrete formulas;
-2. Shulman's headline phenomenon — **apartness is the antithesis of
-   equality** — packaged as: the refutation side of any affine equivalence
-   relation is automatically an irreflexive, symmetric relation satisfying a
-   substitution (weak cotransitivity) law.
+Surface syntax, and Shulman's headline phenomenon — apartness is the antithesis
+of equality — now with the refutation carrying *witness data* (a `Type`).
 -/
+
+universe u
 
 namespace Antithesis
 open scoped Antithesis
@@ -25,70 +24,55 @@ open scoped Antithesis
 section Surface
 variable (P Q R : AProp) (p q : Prop)
 
--- The brackets translate to the named connectives, definitionally.
 example : ⟬ P ⊗ Q ⟭ = P.tensor Q := rfl
 example : ⟬ P ⊓ Q ⊸ R ⟭ = (P.with' Q).limp R := rfl
 example : ⟬ ~ P ⟭ = P.perp := rfl
-example : ⟬ P ᗮ ⟭ = P.perp := rfl
+example : ⟬ ⟪p⟫ ⟭ = AProp.liftProp p := rfl
 
--- Atoms: an `AProp` is embedded directly; a `Prop` is lifted to `(p, ¬p)`.
-example : ⟬ ⟪p⟫ ⟭ = AProp.lift p := rfl
-example : ⟬ P ⊗ ⟪p⟫ ⟭ = P.tensor (AProp.lift p) := rfl
-
--- Quantifiers bind a Lean variable; the body is affine.
-example (A : Prop) (S : A → AProp) :
-    ⟬ ∀ a, ⟪A⟫ ⊸ ⟪S a⟫ ⟭ = AProp.all (fun a => (AProp.lift A).limp (S a)) := rfl
-
--- ...and the tactic proves entailments stated in surface syntax:
 example : ⟬ P ⊗ Q ⟭ ⊢ ⟬ Q ⊗ P ⟭ := by antithesis
 example : ⟬ ⟪p⟫ ⊓ ⟪q⟫ ⟭ ⊢ ⟬ ⟪p⟫ ⟭ := by antithesis
 
 end Surface
 
-/-! ## Apartness as the antithesis of equality
+/-! ## Apartness as the antithesis of equality -/
 
-An **affine equivalence relation** assigns to each pair an affine proposition
-that is reflexive, symmetric, and (multiplicatively) transitive. -/
-
-/-- An affine (proof-irrelevant) equivalence relation on `α`. -/
-structure AEquiv (α : Type*) where
-  /-- The affine relation; `(rel x y)⁺` asserts `x ~ y`, `(rel x y)⁻` refutes it. -/
-  rel : α → α → AProp
+/-- An affine equivalence relation on `α`. -/
+structure AEquiv (α : Type u) where
+  /-- The affine relation. -/
+  rel : α → α → AProp.{u}
   refl : ∀ x, Holds (rel x x)
   symm : ∀ x y, rel x y ⊢ rel y x
   trans : ∀ x y z, rel x y ⊗ rel y z ⊢ rel x z
 
 namespace AEquiv
-variable {α : Type*} (E : AEquiv α)
+variable {α : Type u} (E : AEquiv α)
 
-/-- The **apartness** induced by an affine equivalence relation: the refutation
-side `x # y := (x ~ y)⁻`. -/
-def apart (x y : α) : Prop := (E.rel x y).neg
+/-- The induced **apartness**: the refutation side `(x ~ y)⁻`, which may carry a
+witness (it is a `Type`). -/
+def apart (x y : α) : Type u := (E.rel x y).neg
 
 /-- Apartness is irreflexive — the antithesis of reflexivity. -/
-theorem apart_irrefl (x : α) : ¬ E.apart x x := (E.rel x x).excl (E.refl x)
+def apart_irrefl (x : α) : E.apart x x → Empty := (E.rel x x).excl (E.refl x)
 
 /-- Apartness is symmetric — the antithesis of symmetry. -/
-theorem apart_symm {x y : α} (h : E.apart x y) : E.apart y x := (E.symm y x).2 h
+def apart_symm {x y : α} : E.apart x y → E.apart y x := (E.symm y x).2
 
-/-- Substitution / weak cotransitivity — the antithesis of transitivity: if
-`x # z`, then `x ~ y` forces `y # z`, and `y ~ z` forces `x # y`. -/
-theorem apart_subst {x y z : α} (h : E.apart x z) :
-    (Holds (E.rel x y) → E.apart y z) ∧ (Holds (E.rel y z) → E.apart x y) :=
+/-- Substitution / weak cotransitivity — the antithesis of transitivity. -/
+def apart_subst {x y z : α} (h : E.apart x z) :
+    (Holds (E.rel x y) → E.apart y z) × (Holds (E.rel y z) → E.apart x y) :=
   (E.trans x y z).2 h
 
 end AEquiv
 
-/-- The discrete affine equivalence relation `x ↦ (x = y, x ≠ y)` on any type;
-here the induced apartness is just `≠`. -/
-def eqAEquiv (α : Type*) : AEquiv α where
-  rel x y := AProp.lift (x = y)
-  refl _ := rfl
-  symm _ _ := ⟨Eq.symm, fun hne h => hne h.symm⟩
-  trans _ _ _ :=
-    ⟨fun ⟨a, b⟩ => a.trans b,
-     fun hne => ⟨fun hxy hyz => hne (hxy.trans hyz), fun hyz hxy => hne (hxy.trans hyz)⟩⟩
+/-- A witnessed apartness structure (the refutation carries data, e.g. a
+separating modulus). -/
+structure WApart (α : Type u) where
+  /-- Evidence that `x` and `y` are apart. -/
+  apart : α → α → AProp.{u}
+  /-- The affirmation of `apart x y` *is* the witness type. -/
+  refl_excl : ∀ x, (apart x x).pos → Empty
 
-example (α : Type*) (x : α) : ¬ (eqAEquiv α).apart x x := (eqAEquiv α).apart_irrefl x
+/-- From a witnessed apartness, the diagonal is uninhabited (constructively). -/
+example {α : Type u} (A : WApart α) (x : α) : (A.apart x x).pos → Empty := A.refl_excl x
 
 end Antithesis

@@ -38,7 +38,7 @@ example : P ⊗ Q ⊢ P := by
   lclose
 
 section Predicate
-variable {α : Sort*} (S T : α → AProp) (a : α)
+variable {α : Type} (S T : α → AProp) (a : α)
 
 /-- `⨅`-instantiation. -/
 example : AProp.all S ⊢ S a := by
