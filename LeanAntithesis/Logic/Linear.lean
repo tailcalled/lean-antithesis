@@ -3,7 +3,7 @@ Copyright (c) 2026 tailcalled. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: tailcalled
 -/
-import LeanAntithesis.Calculus
+import LeanAntithesis.Logic.Calculus
 
 /-!
 # Reflected linear context for the `linear` proof mode (Type-valued)

@@ -3,7 +3,7 @@ Copyright (c) 2026 tailcalled. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: tailcalled
 -/
-import LeanAntithesis.LinearTactic
+import LeanAntithesis.Logic.LinearTactic
 
 /-! End-to-end tests of the `linear` proof-mode tactics. -/
 

@@ -3,7 +3,7 @@ Copyright (c) 2026 tailcalled. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: tailcalled
 -/
-import LeanAntithesis.Tactic
+import LeanAntithesis.Logic.Tactic
 
 /-!
 # The affine sequent calculus, as composable entailment realizers
@@ -76,6 +76,17 @@ def plus_elim (h₁ : P ⊢ R) (h₂ : Q ⊢ R) : P ⊔ Q ⊢ R :=
 
 /-- Dereliction `!P ⊢ P`. -/
 def derelict : AProp.bang P ⊢ P := by antithesis
+
+/-! ## Units and De Morgan -/
+
+def bot_entails : AProp.bot ⊢ P := by antithesis
+def entails_top : P ⊢ AProp.top := by antithesis
+-- (Note: `P ⊓ Pᗮ ⊢ ⊥` is NOT constructively valid — the refutation side would
+-- need excluded middle.  Only the affirmation side is contradictory, via `excl`.)
+-- These De Morgan laws are definitional equalities of `.pos`/`.neg`, so the
+-- entailment maps are the identity.
+def compl_with : (P ⊓ Q)ᗮ ⊢ Pᗮ ⊔ Qᗮ := ⟨id, id⟩
+def with_compl : Pᗮ ⊔ Qᗮ ⊢ (P ⊓ Q)ᗮ := ⟨id, id⟩
 
 /-! ## Quantifiers -/
 
