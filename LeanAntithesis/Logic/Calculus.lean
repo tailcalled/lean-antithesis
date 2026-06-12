@@ -81,8 +81,17 @@ def derelict : AProp.bang P ⊢ P := by antithesis
 
 def bot_entails : AProp.bot ⊢ P := by antithesis
 def entails_top : P ⊢ AProp.top := by antithesis
--- (Note: `P ⊓ Pᗮ ⊢ ⊥` is NOT constructively valid — the refutation side would
--- need excluded middle.  Only the affirmation side is contradictory, via `excl`.)
+
+/-- Multiplicative non-contradiction: `P ⊗ Pᗮ ⊢ ⊥` (holds outright). -/
+def tensor_perp_bot : P ⊗ Pᗮ ⊢ AProp.bot := by antithesis
+
+/-- Additive non-contradiction *with the exponential*: `!(P ⊓ Pᗮ) ⊢ ⊥`.
+
+The bare `P ⊓ Pᗮ ⊢ ⊥` is NOT constructively valid — its refutation side would
+need excluded middle (`apart-from-P ∨ P`).  The `!` grants unrestricted access
+to the joint affirmation, which suffices to refute the conjunction. -/
+def bang_with_perp_bot : ！(P ⊓ Pᗮ) ⊢ AProp.bot := by antithesis
+
 -- These De Morgan laws are definitional equalities of `.pos`/`.neg`, so the
 -- entailment maps are the identity.
 def compl_with : (P ⊓ Q)ᗮ ⊢ Pᗮ ⊔ Qᗮ := ⟨id, id⟩

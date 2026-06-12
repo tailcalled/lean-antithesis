@@ -93,10 +93,14 @@ def union_subset (h₁ : S ⊑ U) (h₂ : T ⊑ U) : S ∪ T ⊑ U := fun x => p
 /-- Contraposition: inclusion reverses under complement. -/
 def compl_subset_compl (h : S ⊑ T) : Tᶜ ⊑ Sᶜ := fun x => perp_mono (h x)
 
-/-- A complemented subset and its complement have no common member.  (Note: the
-*stronger* `S ∩ Sᶜ ⊑ ∅` is NOT constructively valid — its refutation side needs
-excluded middle.  This is the constructive content: membership is contradictory.) -/
-def not_mem_inter_compl : (x ∈ₐ S ∩ Sᶜ) → Empty := fun ⟨hp, hn⟩ => (S x).excl hp hn
+/-- Pointwise exponential `!S` (unrestricted access). -/
+def bang (S : CSet.{u} X) : CSet.{u} X := fun x => ！(S x)
+
+/-- With the exponential, a complemented subset is disjoint from its complement:
+`!(S ∩ Sᶜ) ⊑ ∅`.  (The bare `S ∩ Sᶜ ⊑ ∅` would need excluded middle; `!` is what
+makes the disjointness expressible *inside* the affine logic.) -/
+def bang_inter_compl_subset_empty : (S ∩ Sᶜ).bang ⊑ (∅ : CSet.{u} X) :=
+  fun _ => bang_with_perp_bot
 
 /-- De Morgan, both directions. -/
 def compl_inter : (S ∩ T)ᶜ ⊑ Sᶜ ∪ Tᶜ := fun _ => compl_with
