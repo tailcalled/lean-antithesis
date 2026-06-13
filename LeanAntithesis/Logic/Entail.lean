@@ -31,6 +31,17 @@ def Entails (P : AProp.{u}) (Q : AProp.{v}) : Type (max u v) :=
 /-- Entailment is, definitionally, the validity of linear implication. -/
 theorem entails_eq_holds_limp (P Q : AProp.{u}) : (P ⊢ Q) = Holds (P.limp Q) := rfl
 
+/-- `A` is **valid** (a theorem): the unit entails it, `𝟙 ⊢ A`.  Being a sequent,
+this composes with the calculus via `cut` — unlike the bare projection `Holds`. -/
+abbrev Valid (A : AProp.{u}) : Type u := AProp.top ⊢ A
+
+/-- Validity gives affirmation. -/
+def Valid.holds {A : AProp.{u}} (h : Valid A) : Holds A := h.1 PUnit.unit
+
+/-- Affirmation gives validity (the refutation side follows from `excl`). -/
+def Valid.of_holds {A : AProp.{u}} (h : Holds A) : Valid A :=
+  ⟨fun _ => h, fun hn => (A.excl h hn).elim⟩
+
 namespace Entails
 
 /-- Identity entailment. -/

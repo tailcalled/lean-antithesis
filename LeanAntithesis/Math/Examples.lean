@@ -35,7 +35,7 @@ end Surface
 structure AEquiv (α : Type u) where
   /-- The affine relation. -/
   rel : α → α → AProp.{u}
-  refl : ∀ x, Holds (rel x x)
+  refl : ∀ x, Valid (rel x x)
   symm : ∀ x y, rel x y ⊢ rel y x
   trans : ∀ x y z, rel x y ⊗ rel y z ⊢ rel x z
 
@@ -47,15 +47,16 @@ witness (it is a `Type`). -/
 def apart (x y : α) : Type u := (E.rel x y).neg
 
 /-- Apartness is irreflexive — the antithesis of reflexivity. -/
-def apart_irrefl (x : α) : E.apart x x → Empty := (E.rel x x).excl (E.refl x)
+def apart_irrefl (x : α) : E.apart x x → Empty := (E.rel x x).excl (Valid.holds (E.refl x))
 
 /-- Apartness is symmetric — the antithesis of symmetry. -/
 def apart_symm {x y : α} : E.apart x y → E.apart y x := (E.symm y x).2
 
 /-- Substitution / weak cotransitivity — the antithesis of transitivity. -/
 def apart_subst {x y z : α} (h : E.apart x z) :
-    (Holds (E.rel x y) → E.apart y z) × (Holds (E.rel y z) → E.apart x y) :=
-  (E.trans x y z).2 h
+    (Valid (E.rel x y) → E.apart y z) × (Valid (E.rel y z) → E.apart x y) :=
+  let t := (E.trans x y z).2 h
+  ⟨fun v => t.1 (Valid.holds v), fun v => t.2 (Valid.holds v)⟩
 
 end AEquiv
 

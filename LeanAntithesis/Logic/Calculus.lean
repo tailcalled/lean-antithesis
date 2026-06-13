@@ -55,6 +55,28 @@ def uncurry (h : P ⊢ Q ⊸ R) : P ⊗ Q ⊢ R :=
    fun hrn => ⟨fun hp => (h.1 hp).2 hrn, fun hq => h.2 ⟨hq, hrn⟩⟩⟩
 def limp_mono (h₁ : P' ⊢ P) (h₂ : Q ⊢ Q') : (P ⊸ Q) ⊢ (P' ⊸ Q') := by antithesis
 
+/-- Contraposition of `⊸`. -/
+def limp_contra : (P ⊸ Q) ⊢ (Qᗮ ⊸ Pᗮ) := by antithesis
+
+/-- Composition of linear implications. -/
+def limp_comp : (P ⊸ Q) ⊗ (Q ⊸ R) ⊢ (P ⊸ R) :=
+  ⟨fun fg => Entails.trans fg.1 fg.2,
+   fun pr => ⟨fun f => ⟨f.1 pr.1, pr.2⟩, fun g => ⟨pr.1, g.2 pr.2⟩⟩⟩
+
+/-- `⊸` distributes over `⊓` in its codomain. -/
+def limp_with : (P ⊸ Q) ⊓ (P ⊸ R) ⊢ (P ⊸ (Q ⊓ R)) :=
+  ⟨fun fg => ⟨fun pp => ⟨fg.1.1 pp, fg.2.1 pp⟩, Trunc'.elimProp (Sum.elim fg.1.2 fg.2.2)⟩,
+   fun pr => Trunc'.elimProp (fun s =>
+     Sum.elim (fun qn => Trunc'.mk (.inl ⟨pr.1, qn⟩))
+              (fun rn => Trunc'.mk (.inr ⟨pr.1, rn⟩)) s) pr.2⟩
+
+/-- `⊸` turns `⊔` in its domain into `⊓`. -/
+def limp_plus : (P ⊸ R) ⊓ (Q ⊸ R) ⊢ ((P ⊔ Q) ⊸ R) :=
+  ⟨fun fg => ⟨Trunc'.elimProp (Sum.elim fg.1.1 fg.2.1), fun rn => ⟨fg.1.2 rn, fg.2.2 rn⟩⟩,
+   fun tr => Trunc'.elimProp (fun s =>
+     Sum.elim (fun pp => Trunc'.mk (.inl ⟨pp, tr.2⟩))
+              (fun qp => Trunc'.mk (.inr ⟨qp, tr.2⟩)) s) tr.1⟩
+
 /-! ## Additive -/
 
 def with_fst : P ⊓ Q ⊢ P := by antithesis
@@ -113,6 +135,21 @@ def all_mono {B B' : α → AProp.{u}} (h : ∀ x, B x ⊢ B' x) : AProp.all B �
 
 def ex_mono {B B' : α → AProp.{u}} (h : ∀ x, B x ⊢ B' x) : AProp.ex B ⊢ AProp.ex B' :=
   ex_elim fun x => cut (h x) (ex_intro x)
+
+/-- `⨅` commutes with `⊗`. -/
+def all_tensor {A B : α → AProp.{u}} :
+    (AProp.all A) ⊗ (AProp.all B) ⊢ AProp.all (fun x => A x ⊗ B x) :=
+  ⟨fun fg x => ⟨fg.1 x, fg.2 x⟩,
+   Trunc'.elimProp fun p => ⟨fun fa => Trunc'.mk ⟨p.1, p.2.1 (fa p.1)⟩,
+                             fun fb => Trunc'.mk ⟨p.1, p.2.2 (fb p.1)⟩⟩⟩
+
+/-- `⨅` distributes over `⊓`. -/
+def all_with {A B : α → AProp.{u}} :
+    (AProp.all A) ⊓ (AProp.all B) ⊢ AProp.all (fun x => A x ⊓ B x) :=
+  ⟨fun fg x => ⟨fg.1 x, fg.2 x⟩,
+   Trunc'.elimProp fun p => Trunc'.elimProp (fun s =>
+     Sum.elim (fun an => Trunc'.mk (.inl (Trunc'.mk ⟨p.1, an⟩)))
+              (fun bn => Trunc'.mk (.inr (Trunc'.mk ⟨p.1, bn⟩))) s) p.2⟩
 
 /-! ## Proof-driving tactics -/
 
