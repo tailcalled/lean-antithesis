@@ -1,8 +1,10 @@
 import LeanAntithesis.Math.Deriving
 
-/-! Exercises the `deriving AEquiv` handler from an *importing* module (the only
-place an `initialize`-registered handler is active). Covers an enum, a recursive
-type, and a type with a foreign field — all via the `deriving` clause. -/
+/-! Exercises the `deriving AEquiv` handler and the `aequiv` tactic from an
+*importing* module (the only place the `initialize`-registered handler and
+`@[aequivLemmas]` attribute are active). Covers an enum, a recursive type, a
+foreign-field type, and a parameterized type — via the `deriving` clause — and
+shows `aequiv` closing equality/apartness goals without `Valid.of_holds`. -/
 
 namespace Antithesis
 open scoped Antithesis
@@ -12,8 +14,8 @@ inductive Dir where
   | up | down
   deriving AEquiv
 
-example : Valid (AEquiv.rel Dir.up Dir.up) := AEquiv.refl _
-example : Valid (AEquiv.apart Dir.up Dir.down) := Valid.of_holds (Trunc'.mk .up_down)
+example : Valid (AEquiv.rel Dir.up Dir.up) := by aequiv
+example : Valid (AEquiv.apart Dir.up Dir.down) := by aequiv
 
 -- recursive
 inductive Bin where
@@ -21,9 +23,12 @@ inductive Bin where
   | node (l r : Bin)
   deriving AEquiv
 
-example : Valid (AEquiv.rel (Bin.node .leaf .leaf) (Bin.node .leaf .leaf)) := AEquiv.refl _
-example : Valid (AEquiv.apart Bin.leaf (Bin.node .leaf .leaf)) :=
-  Valid.of_holds (Trunc'.mk .leaf_node)
+example : Valid (AEquiv.rel (Bin.node .leaf .leaf) (Bin.node .leaf .leaf)) := by aequiv
+example : Valid (AEquiv.apart Bin.leaf (Bin.node .leaf .leaf)) := by aequiv
+-- apartness deep in the structure (needs backtracking search)
+example :
+    Valid (AEquiv.apart (Bin.node .leaf (.node .leaf .leaf))
+                        (Bin.node .leaf .leaf)) := by aequiv
 
 -- foreign field: `Labeled` carries a `Dir`, whose `AEquiv` was derived above
 inductive Labeled where
@@ -31,28 +36,38 @@ inductive Labeled where
   | nil
   deriving AEquiv
 
-example : Valid (AEquiv.rel Labeled.nil Labeled.nil) := AEquiv.refl _
+example : Valid (AEquiv.rel Labeled.nil Labeled.nil) := by aequiv
 example :
-    Valid (AEquiv.apart (Labeled.cons .up .nil) (Labeled.cons .down .nil)) :=
-  Valid.of_holds (Trunc'.mk (.cons_0 (Trunc'.mk .up_down)))
+    Valid (AEquiv.apart (Labeled.cons .up .nil) (Labeled.cons .down .nil)) := by aequiv
 
--- computable + constructive through a derived foreign-field instance
-def labeledDemo : (AEquiv.rel (Labeled.cons .up .nil) (Labeled.cons .up .nil)).pos :=
-  Valid.holds (AEquiv.refl _)
-
--- parameterized: `MyList α` needs `[AEquiv α]`, composing the element relation
+-- parameterized: `MyList α` needs `[AEquiv α]`, composing the element relation —
+-- no `DecidableEq` required, so it would work for `α` a function type too
 inductive MyList (α : Type u) where
   | nil
   | cons (a : α) (as : MyList α)
   deriving AEquiv
 
-example : Valid (AEquiv.rel (MyList.nil : MyList Dir) .nil) := AEquiv.refl _
+example : Valid (AEquiv.rel (MyList.nil : MyList Dir) .nil) := by aequiv
+example : Valid (AEquiv.apart (MyList.cons Dir.up .nil) MyList.nil) := by aequiv
+-- element apart, and element apart in the tail (backtracking past the head)
 example :
-    Valid (AEquiv.apart (MyList.cons Dir.up .nil) (MyList.cons Dir.down .nil)) :=
-  Valid.of_holds (Trunc'.mk (.cons_0 (Trunc'.mk .up_down)))
--- works even when the element type has no `DecidableEq` (e.g. functions),
--- so long as it carries an `AEquiv`
-example : Valid (AEquiv.apart (MyList.cons Dir.up .nil) MyList.nil) :=
-  Valid.of_holds (Trunc'.mk .cons_nil)
+    Valid (AEquiv.apart (MyList.cons Dir.up .nil) (MyList.cons Dir.down .nil)) := by aequiv
+example :
+    Valid (AEquiv.apart (MyList.cons Dir.up (.cons Dir.up .nil))
+                        (MyList.cons Dir.up (.cons Dir.down .nil))) := by aequiv
+
+-- tactic-built proofs are still computable + constructive (axioms: only `Quot.sound`)
+def myListDemo : (AEquiv.rel (MyList.cons Dir.up .nil) (MyList.cons Dir.up .nil)).pos :=
+  Valid.holds (by aequiv)
+#print axioms myListDemo
+
+/-! `aequiv` is not limited to `Valid` (`𝟙 ⊢ ·`): a concrete fact weakens into any
+context, so it discharges a sequent goal `Γ ⊢ ·` with arbitrary hypotheses. -/
+example (Γ : AProp) : Γ ⊢ AEquiv.rel Dir.up Dir.up := by aequiv
+example (Γ : AProp) : Γ ⊢ AEquiv.apart Dir.up Dir.down := by aequiv
+example (Γ : AProp) :
+    Γ ⊢ AEquiv.apart (MyList.cons Dir.up .nil) (MyList.cons Dir.down .nil) := by aequiv
+-- and on a bare `Holds` goal
+example : Holds (AEquiv.apart Bin.leaf (Bin.node .leaf .leaf)) := by aequiv
 
 end Antithesis

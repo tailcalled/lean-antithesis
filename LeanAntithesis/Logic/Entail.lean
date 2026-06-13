@@ -51,6 +51,12 @@ def refl (P : AProp.{u}) : P ⊢ P := ⟨id, id⟩
 def trans {P : AProp.{u}} {Q : AProp.{v}} {R : AProp.{w}} (h₁ : P ⊢ Q) (h₂ : Q ⊢ R) : P ⊢ R :=
   ⟨fun hp => h₂.1 (h₁.1 hp), fun hr => h₁.2 (h₂.2 hr)⟩
 
+/-- A valid conclusion holds in **any** context (affine weakening): an affirmation
+of `A` entails `A` from any `Γ`.  Generalises `Valid.of_holds` (the `Γ = 𝟙` case)
+so concrete facts can be discharged inside a larger sequent. -/
+def of_holds {Γ : AProp.{v}} {A : AProp.{u}} (h : Holds A) : Γ ⊢ A :=
+  ⟨fun _ => h, fun hn => (A.excl h hn).elim⟩
+
 end Entails
 
 /-- `calc` support for `⊢` (single universe). -/

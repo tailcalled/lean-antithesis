@@ -21,6 +21,10 @@ supported: they get `[AEquiv _]` binders, so e.g. `MyList α` derives given
 
 open Lean Elab Command Meta Parser.Term
 
+/-- Lemma set used by the `aequiv` tactic: the structural-equality / apartness
+constructors of every derived type, plus `Trunc'.mk`. -/
+register_label_attr aequivLemmas
+
 namespace Antithesis
 
 /-! ## Analysis -/
@@ -162,6 +166,12 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
     apCtors := apCtors.push (← mkFieldApartCtor apId c p)
   elabCommand (← `(inductive $apId $binders:bracketedBinder* :
     $TApp → $TApp → $sortStx where $apCtors*))
+  -- tag both families' constructors so the `aequiv` tactic can find them
+  let mut ctorIds : Array Ident := ctors.map eqCtor
+  for ci in ctors do for cj in ctors do
+    if ci.short != cj.short then ctorIds := ctorIds.push (apMis ci cj)
+  for c in ctors do for p in [0:c.fields.size] do ctorIds := ctorIds.push (apFld c p)
+  elabCommand (← `(attribute [aequivLemmas] $ctorIds*))
   -- helper: a `private def name : ty := fun args => match args with alts`
   let mkDef (name : Ident) (ty : Term) (args : Array Ident)
       (alts : Array (TSyntax ``Lean.Parser.Term.matchAlt)) : CommandElabM Unit := do
@@ -297,62 +307,30 @@ initialize
     names.forM deriveAEquiv
     return true
 
-/-! ## Smoke tests -/
+/-! ## The `aequiv` tactic
 
-inductive Tree where
-  | leaf
-  | node (l r : Tree)
+Closes a concrete structural equality/apartness goal by searching for the witness
+— so apartness reads as nicely as `AEquiv.refl` does for equality, with no
+`Valid.of_holds`/`Trunc'.mk` plumbing.  Works on `Valid (AEquiv.rel/apart a b)`,
+on `Holds`, and — since a concrete fact is valid and so weakens into any context —
+on a sequent `Γ ⊢ AEquiv.rel/apart a b` with arbitrary hypotheses `Γ`.
 
-derive_aequiv Tree
+It reduces the goal with `Entails.of_holds` (affine weakening; the `Γ = 𝟙` case is
+ordinary validity) and lets `solve_by_elim` assemble the witness from the
+`@[aequivLemmas]`-tagged constructors of every derived family. -/
+syntax "aequiv" : tactic
+macro_rules
+  | `(tactic| aequiv) =>
+    -- `mkIdent` keeps the attribute name unhygienic so `using` resolves it
+    `(tactic| first
+      | exact Entails.of_holds (AEquiv.refl _).holds
+      | exact (AEquiv.refl _).holds
+      | ((try apply Entails.of_holds)
+         solve_by_elim (maxDepth := 32) [Trunc'.mk] using $(mkIdent `aequivLemmas)))
 
-example : Valid (AEquiv.rel Tree.leaf Tree.leaf) := AEquiv.refl _
-example : Valid (AEquiv.apart Tree.leaf (Tree.node .leaf .leaf)) :=
-  Valid.of_holds (Trunc'.mk .leaf_node)
-
--- an enum (all nullary constructors)
-inductive Color where
-  | red | green | blue
-
-derive_aequiv Color
-
-example : Valid (AEquiv.apart Color.red Color.blue) :=
-  Valid.of_holds (Trunc'.mk .red_blue)
-
--- a type with a *foreign* field (`Color`, whose `AEquiv` was just derived)
-inductive Tagged where
-  | tag (c : Color) (sub : Tagged)
-  | done
-
-derive_aequiv Tagged
-
-example : Valid (AEquiv.rel Tagged.done Tagged.done) := AEquiv.refl _
--- foreign field apart ⇒ the whole structure is apart
-example : Valid (AEquiv.apart (Tagged.tag .red .done) (Tagged.tag .blue .done)) :=
-  Valid.of_holds (Trunc'.mk (.tag_0 (Trunc'.mk .red_blue)))
-
-/-- The derived instance is **computable** (a `def`, no `noncomputable`) … -/
-def taggedReflDemo : (AEquiv.rel (Tagged.tag .green .done) (Tagged.tag .green .done)).pos :=
-  Valid.holds (AEquiv.refl _)
-
--- … and **constructive**: only `propext`/`Quot.sound`, no `Classical.choice`.
-#print axioms taggedReflDemo
-
--- a *parameterized* type: foreign element field + recursive tail
-inductive Vec (α : Type u) where
-  | nil
-  | cons (a : α) (rest : Vec α)
-
-derive_aequiv Vec
-
-example : Valid (AEquiv.rel (Vec.nil : Vec Color) Vec.nil) := AEquiv.refl _
-example :
-    Valid (AEquiv.apart (Vec.cons Color.red .nil) (Vec.cons Color.blue .nil)) :=
-  Valid.of_holds (Trunc'.mk (.cons_0 (Trunc'.mk .red_blue)))
-def vecReflDemo : (AEquiv.rel (Vec.cons Color.red .nil) (Vec.cons Color.red .nil)).pos :=
-  Valid.holds (AEquiv.refl _)
-#print axioms vecReflDemo
-
--- The `deriving AEquiv` clause (handler) only activates in *importing* modules,
--- since `initialize` runs at import time; see `Test/Deriving.lean`.
+/-! The `derive_aequiv` command and `deriving AEquiv` clause, the `aequiv` tactic,
+and the smoke tests all live in importing modules (the handler and the
+`@[aequivLemmas]` attribute are `initialize`-registered, hence only active on
+import); see `Test/Deriving.lean`. -/
 
 end Antithesis
