@@ -151,6 +151,32 @@ def all_with {A B : α → AProp.{u}} :
      Sum.elim (fun an => Trunc'.mk (.inl (Trunc'.mk ⟨p.1, an⟩)))
               (fun bn => Trunc'.mk (.inr (Trunc'.mk ⟨p.1, bn⟩))) s) p.2⟩
 
+/-! ## Building an `AProp` from two `Type`s of evidence
+
+`ofTypes P N e` packages an affirmation type `P` and refutation type `N` (with
+their incompatibility `e`) into an `AProp`, truncating each to a proposition.
+It is **computable** (non-recursive), so instances built from it export bytecode.
+`ofTypes_mono`/`ofTypes_tensor` are the Chu morphisms, letting you build
+entailments from plain functions on `P`/`N`. -/
+
+/-- Package two evidence `Type`s into an `AProp` (truncating each). -/
+def AProp.ofTypes (P N : Type u) (e : P → N → Empty) : AProp.{u} :=
+  ⟨Trunc' P, Trunc' N, fun tp tn => Trunc'.toEmpty (fun p => Trunc'.toEmpty (e p) tn) tp⟩
+
+/-- A Chu morphism on the raw evidence types: forward on affirmation, backward
+on refutation. -/
+def AProp.ofTypes_mono {P N P' N' : Type u} {e : P → N → Empty} {e' : P' → N' → Empty}
+    (f : P → P') (g : N' → N) : AProp.ofTypes P N e ⊢ AProp.ofTypes P' N' e' :=
+  ⟨Trunc'.map f, Trunc'.map g⟩
+
+/-- A multiplicative (tensor) Chu morphism, for composing two packaged props. -/
+def AProp.ofTypes_tensor {A X B Y C Z : Type u}
+    {eAX : A → X → Empty} {eBY : B → Y → Empty} {eCZ : C → Z → Empty}
+    (f : A → B → C) (gL : A → Z → Y) (gR : B → Z → X) :
+    AProp.ofTypes A X eAX ⊗ AProp.ofTypes B Y eBY ⊢ AProp.ofTypes C Z eCZ :=
+  ⟨fun ab => Trunc'.map₂ f ab.1 ab.2,
+   fun tz => ⟨fun ta => Trunc'.map₂ gL ta tz, fun tb => Trunc'.map₂ gR tb tz⟩⟩
+
 /-! ## Proof-driving tactics -/
 
 /-- `lcut B` proves `P ⊢ R` through an intermediate `B`. -/

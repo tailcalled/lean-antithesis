@@ -58,6 +58,11 @@ def elimProp {α : Type u} {β : Type v} [Subsingleton β] (f : α → β) : Tru
 def map {α : Type u} {β : Type v} (f : α → β) : Trunc' α → Trunc' β :=
   lift (fun a => mk (f a)) (fun _ _ => Subsingleton.elim _ _)
 
+/-- Binary functorial action. -/
+def map₂ {α : Type u} {β : Type v} {γ : Type w} (f : α → β → γ)
+    (a : Trunc' α) (b : Trunc' β) : Trunc' γ :=
+  lift (fun x => map (f x) b) (fun _ _ => Subsingleton.elim _ _) a
+
 end Trunc'
 
 /-! ## The core type -/

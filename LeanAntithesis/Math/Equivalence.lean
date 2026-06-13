@@ -19,10 +19,10 @@ universe u
 namespace Antithesis
 open scoped Antithesis
 
-/-! ## The relation -/
+/-! ## The relation (a typeclass — derivable per type, like `DecidableEq`) -/
 
-/-- An affine equivalence relation on `α`. -/
-structure AEquiv (α : Type u) where
+/-- A type `α` carries an affine equivalence relation. -/
+class AEquiv (α : Type u) where
   /-- The relation; `(rel x y)⁺` affirms `x ~ y`, `(rel x y)⁻` is `x # y`. -/
   rel : α → α → AProp.{u}
   /-- Reflexivity. -/
@@ -33,34 +33,35 @@ structure AEquiv (α : Type u) where
   trans : ∀ x y z, rel x y ⊗ rel y z ⊢ rel x z
 
 namespace AEquiv
-variable {α : Type u} (E : AEquiv α)
+variable {α : Type u} [AEquiv α]
 
 /-- The induced **apartness** `x # y`, the antithesis of `x ~ y`. -/
-def apart (x y : α) : AProp.{u} := (E.rel x y)ᗮ
+def apart (x y : α) : AProp.{u} := (rel x y)ᗮ
 
 /-- Apartness is **irreflexive** — reflexivity dualized (`x # x ⊢ ⊥`). -/
-def apart_irrefl (x : α) : E.apart x x ⊢ AProp.bot := perp_mono (E.refl x)
+def apart_irrefl (x : α) : apart x x ⊢ AProp.bot := perp_mono (refl x)
 
 /-- Apartness is **symmetric** — symmetry dualized. -/
-def apart_symm (x y : α) : E.apart x y ⊢ E.apart y x := perp_mono (E.symm y x)
+def apart_symm (x y : α) : apart x y ⊢ apart y x := perp_mono (symm y x)
 
 /-- Apartness is **cotransitive** (the multiplicative `⅋` form) — transitivity
 dualized: `x # z ⊢ (x # y) ⅋ (y # z)`. -/
-def apart_cotrans (x y z : α) : E.apart x z ⊢ E.apart x y ⅋ E.apart y z :=
-  perp_mono (E.trans x y z)
+def apart_cotrans (x y z : α) : apart x z ⊢ apart x y ⅋ apart y z :=
+  perp_mono (trans x y z)
 
 /-- The "singleton" complemented subset `{a}`: `x ∈ {a}` iff `a ~ x`. -/
-def singleton (a : α) : CSet.{u} α := fun x => E.rel a x
+def singleton (a : α) : CSet.{u} α := fun x => rel a x
 
 /-- Its complement is exactly "apart from `a`". -/
-theorem compl_singleton (a : α) : (E.singleton a)ᶜ = fun x => E.apart a x := rfl
+theorem compl_singleton (a : α) : (singleton a)ᶜ = fun x => apart a x := rfl
 
 end AEquiv
 
 /-! ## Setoids: types equipped with an affine equivalence relation -/
 
 /-- A type bundled with an affine equivalence relation — a "set" in the
-constructive sense (equality `~`, apartness `#`). -/
+constructive sense (equality `~`, apartness `#`).  Recover it from the class via
+`ASetoid.of α`. -/
 structure ASetoid : Type (u + 1) where
   /-- The underlying type. -/
   carrier : Type u
@@ -70,6 +71,9 @@ structure ASetoid : Type (u + 1) where
 namespace ASetoid
 
 instance : CoeSort ASetoid.{u} (Type u) := ⟨carrier⟩
+
+/-- Bundle a type with its `AEquiv` instance. -/
+def of (α : Type u) [e : AEquiv α] : ASetoid.{u} := ⟨α, e⟩
 
 variable (X : ASetoid.{u})
 
