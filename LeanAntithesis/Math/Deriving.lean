@@ -14,8 +14,9 @@ Metaprogramming to generate, for a plain inductive type, the structural
   `ofTypes_tensor`.
 
 Each constructor field is classified as **recursive** (the inductive itself) or
-**foreign** (handled through its own `[AEquiv _]`).  This first cut handles
-parameter-less inductives.
+**foreign** (handled through its own `[AEquiv _]`).  Type parameters are
+supported: they get `[AEquiv _]` binders, so e.g. `MyList α` derives given
+`[AEquiv α]` — no `DecidableEq` needed, so it works for `α` a function type.
 -/
 
 open Lean Elab Command Meta Parser.Term
@@ -112,14 +113,26 @@ def mkFieldApartCtor (apId : Ident) (c : CtorInfo) (p : Nat) :
 
 /-! ## The command -/
 
-/-- Generate the structural `AEquiv` instance for a parameter-less inductive. -/
+/-- Generate the structural `AEquiv` instance for an inductive (whose parameters,
+if any, are themselves types carrying `AEquiv`). -/
 def deriveAEquiv (indName : Name) : CommandElabM Unit := do
   let indVal ← liftTermElabM <| getConstInfoInduct indName
-  if indVal.numParams != 0 then
-    throwError "derive_aequiv: parameters not yet supported"
   let ctors ← analyze indVal
   let Tid := mkIdent indName
   let curr ← getCurrNamespace
+  -- parameters: binders `{α : _}` / `[AEquiv α]`, the applied type `T α …`, and
+  -- the family's result sort (`Type u`).  All empty/`Tid`/`Type` when paramless.
+  let (binders, TApp, sortStx) ← liftTermElabM <|
+    forallTelescopeReducing indVal.type fun ps res => do
+      let mut bs : Array (TSyntax ``Lean.Parser.Term.bracketedBinder) := #[]
+      let mut pids : Array Term := #[]
+      for p in ps do
+        let pid := mkIdent (← p.fvarId!.getUserName)
+        let pty ← inferType p
+        bs := bs.push (← `(bracketedBinder| {$pid : $(← PrettyPrinter.delab pty)}))
+        if pty.isSort then bs := bs.push (← `(bracketedBinder| [AEquiv $pid]))
+        pids := pids.push pid
+      return (bs, ← `($Tid $pids*), ← PrettyPrinter.delab res)
   -- relative names (resolve within the current namespace)
   let rel (suffix : Name) : Name := (indName ++ suffix).replacePrefix curr .anonymous
   let eqId := mkIdent (rel `AEq)
@@ -139,20 +152,22 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
     mkIdent (rel (`Apart ++ Name.mkSimple s!"{c.short}_{p}"))
   -- 1. the AEq inductive
   let eqCtors ← ctors.mapM (mkEqCtor eqId ·)
-  elabCommand (← `(inductive $eqId : $Tid → $Tid → Type where $eqCtors*))
+  elabCommand (← `(inductive $eqId $binders:bracketedBinder* :
+    $TApp → $TApp → $sortStx where $eqCtors*))
   -- 2. the Apart inductive
   let mut apCtors : Array (TSyntax ``Lean.Parser.Command.ctor) := #[]
   for ci in ctors do for cj in ctors do
     if ci.short != cj.short then apCtors := apCtors.push (← mkMismatchCtor apId ci cj)
   for c in ctors do for p in [0:c.fields.size] do
     apCtors := apCtors.push (← mkFieldApartCtor apId c p)
-  elabCommand (← `(inductive $apId : $Tid → $Tid → Type where $apCtors*))
+  elabCommand (← `(inductive $apId $binders:bracketedBinder* :
+    $TApp → $TApp → $sortStx where $apCtors*))
   -- helper: a `private def name : ty := fun args => match args with alts`
   let mkDef (name : Ident) (ty : Term) (args : Array Ident)
       (alts : Array (TSyntax ``Lean.Parser.Term.matchAlt)) : CommandElabM Unit := do
     let discrs : Array (TSyntax ``Lean.Parser.Term.matchDiscr) ←
       args.mapM fun a => `(matchDiscr| $a:term)
-    elabCommand (← `(private def $name:ident : $ty :=
+    elabCommand (← `(private def $name:ident $binders:bracketedBinder* : $ty :=
       fun $args* => match $[$discrs],* with $alts:matchAlt*))
   let wild (n : Nat) : CommandElabM (Array Term) := (Array.range n).mapM fun _ => `(_)
   let he := mkIdent (Name.mkSimple "he")
@@ -172,7 +187,7 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
                   else `((AEquiv.rel _ _).excl $he $hh)
         exclAlts := exclAlts.push
           (← `(matchAltExpr| | $pe, $(apFld c p) $hh => $rhs))
-  mkDef exclId (← `({a b : $Tid} → $eqId a b → $apId a b → Empty))
+  mkDef exclId (← `({a b : $TApp} → $eqId a b → $apId a b → Empty))
     #[mkIdent `e, mkIdent `p] exclAlts
   -- 4. eqRefl : (l : T) → AEq l l
   let mut reflAlts := #[]
@@ -184,7 +199,7 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
       else `(Valid.holds (AEquiv.refl $(xs[i]!)))
     let rhs ← `($(eqCtor c) $rhsArgs*)
     reflAlts := reflAlts.push (← `(matchAltExpr| | $pat => $rhs))
-  mkDef eqReflId (← `((l : $Tid) → $eqId l l)) #[mkIdent `l] reflAlts
+  mkDef eqReflId (← `((l : $TApp) → $eqId l l)) #[mkIdent `l] reflAlts
   -- 5. eqSymm : {a b} → AEq a b → AEq b a
   let mut symmEqAlts := #[]
   for c in ctors do
@@ -195,7 +210,7 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
       else `((AEquiv.symm _ _).1 $(hs[i]!))
     let rhs ← `($(eqCtor c) $rhsArgs*)
     symmEqAlts := symmEqAlts.push (← `(matchAltExpr| | $pat => $rhs))
-  mkDef eqSymmId (← `({a b : $Tid} → $eqId a b → $eqId b a)) #[mkIdent `e] symmEqAlts
+  mkDef eqSymmId (← `({a b : $TApp} → $eqId a b → $eqId b a)) #[mkIdent `e] symmEqAlts
   -- 6. eqTrans : {a b c} → AEq a b → AEq b c → AEq a c
   let mut transEqAlts := #[]
   for c in ctors do
@@ -207,7 +222,7 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
     let rhs ← `($(eqCtor c) $rhsArgs*)
     transEqAlts := transEqAlts.push
       (← `(matchAltExpr| | $p1, $p2 => $rhs))
-  mkDef eqTransId (← `({a b c : $Tid} → $eqId a b → $eqId b c → $eqId a c))
+  mkDef eqTransId (← `({a b c : $TApp} → $eqId a b → $eqId b c → $eqId a c))
     #[mkIdent `e, mkIdent `f] transEqAlts
   -- 7. apSymm : {a b} → Apart a b → Apart b a
   let mut apSymmAlts := #[]
@@ -220,7 +235,7 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
               else `($(apFld c p) ((AEquiv.symm _ _).2 $hh))
     apSymmAlts := apSymmAlts.push
       (← `(matchAltExpr| | $(apFld c p) $hh => $rhs))
-  mkDef apSymmId (← `({a b : $Tid} → $apId a b → $apId b a)) #[mkIdent `p] apSymmAlts
+  mkDef apSymmId (← `({a b : $TApp} → $apId a b → $apId b a)) #[mkIdent `p] apSymmAlts
   -- 8. apSubstL : {a b c} → AEq a b → Apart a c → Apart b c
   let mut substLAlts := #[]
   for c in ctors do
@@ -241,7 +256,7 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
                   else `($(apFld c p) (((AEquiv.trans _ _ _).2 $hh).1 $he))
         substLAlts := substLAlts.push
           (← `(matchAltExpr| | $pe, $(apFld c p) $hh => $rhs))
-  mkDef apSubstLId (← `({a b c : $Tid} → $eqId a b → $apId a c → $apId b c))
+  mkDef apSubstLId (← `({a b c : $TApp} → $eqId a b → $apId a c → $apId b c))
     #[mkIdent `e, mkIdent `p] substLAlts
   -- 9. apSubstR : {a b c} → AEq b c → Apart a c → Apart a b
   let mut substRAlts := #[]
@@ -263,10 +278,10 @@ def deriveAEquiv (indName : Name) : CommandElabM Unit := do
                   else `($(apFld c p) (((AEquiv.trans _ _ _).2 $hh).2 $he))
         substRAlts := substRAlts.push
           (← `(matchAltExpr| | $pe, $(apFld c p) $hh => $rhs))
-  mkDef apSubstRId (← `({a b c : $Tid} → $eqId b c → $apId a c → $apId a b))
+  mkDef apSubstRId (← `({a b c : $TApp} → $eqId b c → $apId a c → $apId a b))
     #[mkIdent `e, mkIdent `p] substRAlts
   -- 10. the instance
-  elabCommand (← `(instance : AEquiv $Tid := {
+  elabCommand (← `(instance $binders:bracketedBinder* : AEquiv $TApp := {
     rel := fun x y => AProp.ofTypes ($eqId x y) ($apId x y) $exclId
     refl := fun l => Valid.of_holds (Trunc'.mk ($eqReflId l))
     symm := fun _ _ => AProp.ofTypes_mono $eqSymmId $apSymmId
@@ -321,6 +336,21 @@ def taggedReflDemo : (AEquiv.rel (Tagged.tag .green .done) (Tagged.tag .green .d
 
 -- … and **constructive**: only `propext`/`Quot.sound`, no `Classical.choice`.
 #print axioms taggedReflDemo
+
+-- a *parameterized* type: foreign element field + recursive tail
+inductive Vec (α : Type u) where
+  | nil
+  | cons (a : α) (rest : Vec α)
+
+derive_aequiv Vec
+
+example : Valid (AEquiv.rel (Vec.nil : Vec Color) Vec.nil) := AEquiv.refl _
+example :
+    Valid (AEquiv.apart (Vec.cons Color.red .nil) (Vec.cons Color.blue .nil)) :=
+  Valid.of_holds (Trunc'.mk (.cons_0 (Trunc'.mk .red_blue)))
+def vecReflDemo : (AEquiv.rel (Vec.cons Color.red .nil) (Vec.cons Color.red .nil)).pos :=
+  Valid.holds (AEquiv.refl _)
+#print axioms vecReflDemo
 
 -- The `deriving AEquiv` clause (handler) only activates in *importing* modules,
 -- since `initialize` runs at import time; see `Test/Deriving.lean`.

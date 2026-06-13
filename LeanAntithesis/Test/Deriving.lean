@@ -40,4 +40,19 @@ example :
 def labeledDemo : (AEquiv.rel (Labeled.cons .up .nil) (Labeled.cons .up .nil)).pos :=
   Valid.holds (AEquiv.refl _)
 
+-- parameterized: `MyList α` needs `[AEquiv α]`, composing the element relation
+inductive MyList (α : Type u) where
+  | nil
+  | cons (a : α) (as : MyList α)
+  deriving AEquiv
+
+example : Valid (AEquiv.rel (MyList.nil : MyList Dir) .nil) := AEquiv.refl _
+example :
+    Valid (AEquiv.apart (MyList.cons Dir.up .nil) (MyList.cons Dir.down .nil)) :=
+  Valid.of_holds (Trunc'.mk (.cons_0 (Trunc'.mk .up_down)))
+-- works even when the element type has no `DecidableEq` (e.g. functions),
+-- so long as it carries an `AEquiv`
+example : Valid (AEquiv.apart (MyList.cons Dir.up .nil) MyList.nil) :=
+  Valid.of_holds (Trunc'.mk .cons_nil)
+
 end Antithesis
