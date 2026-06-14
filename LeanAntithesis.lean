@@ -11,3 +11,4 @@ import LeanAntithesis.Math.Examples
 import LeanAntithesis.Math.ComplementedSet
 import LeanAntithesis.Math.Equivalence
 import LeanAntithesis.Math.Deriving
+import LeanAntithesis.Math.SetoidAlgebra
