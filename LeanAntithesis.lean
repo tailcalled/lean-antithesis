@@ -7,10 +7,10 @@ import LeanAntithesis.Logic.Tactic
 import LeanAntithesis.Logic.Calculus
 import LeanAntithesis.Logic.Linear
 import LeanAntithesis.Logic.LinearTactic
-import LeanAntithesis.Math.Examples
-import LeanAntithesis.Math.ComplementedSet
-import LeanAntithesis.Math.Equivalence
-import LeanAntithesis.Math.Deriving
-import LeanAntithesis.Math.SetoidAlgebra
-import LeanAntithesis.Math.Subsetoid
-import LeanAntithesis.Math.Quotient
+import LeanAntithesis.Sets.Examples
+import LeanAntithesis.Sets.ComplementedSet
+import LeanAntithesis.Sets.Equivalence
+import LeanAntithesis.Sets.Deriving
+import LeanAntithesis.Sets.SetoidAlgebra
+import LeanAntithesis.Sets.Subsetoid
+import LeanAntithesis.Sets.Quotient

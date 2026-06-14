@@ -1,4 +1,4 @@
-import LeanAntithesis.Math.ComplementedSet
+import LeanAntithesis.Sets.ComplementedSet
 
 /-!
 # Affine equivalence relations, apartness, and setoids

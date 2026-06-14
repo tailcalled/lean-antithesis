@@ -1,4 +1,4 @@
-import LeanAntithesis.Math.Equivalence
+import LeanAntithesis.Sets.Equivalence
 
 /-! Validates the structural-apartness pattern a `deriving AEquiv` handler would
 emit for a plain inductive type, and that it slots into the `AEquiv` class /

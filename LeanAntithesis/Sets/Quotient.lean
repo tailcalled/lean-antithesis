@@ -1,4 +1,4 @@
-import LeanAntithesis.Math.Equivalence
+import LeanAntithesis.Sets.Equivalence
 
 /-!
 # Quotient setoids

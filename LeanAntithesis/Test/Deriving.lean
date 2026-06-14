@@ -1,4 +1,4 @@
-import LeanAntithesis.Math.Deriving
+import LeanAntithesis.Sets.Deriving
 
 /-! Exercises the `deriving AEquiv` handler and the `aequiv` tactic from an
 *importing* module (the only place the `initialize`-registered handler and

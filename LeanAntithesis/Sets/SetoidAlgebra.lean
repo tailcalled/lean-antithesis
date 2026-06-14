@@ -1,4 +1,4 @@
-import LeanAntithesis.Math.Deriving
+import LeanAntithesis.Sets.Deriving
 
 /-!
 # The setoid algebra

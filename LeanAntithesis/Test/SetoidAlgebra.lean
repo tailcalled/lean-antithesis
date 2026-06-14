@@ -1,4 +1,4 @@
-import LeanAntithesis.Math.SetoidAlgebra
+import LeanAntithesis.Sets.SetoidAlgebra
 
 /-! Exercises the setoid algebra: derived product/sum setoids close under `aequiv`,
 and the hand-built function setoid supports reflexivity and "differ somewhere"

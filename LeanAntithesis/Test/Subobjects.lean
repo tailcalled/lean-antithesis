@@ -1,6 +1,6 @@
-import LeanAntithesis.Math.Subsetoid
-import LeanAntithesis.Math.Quotient
-import LeanAntithesis.Math.Deriving
+import LeanAntithesis.Sets.Subsetoid
+import LeanAntithesis.Sets.Quotient
+import LeanAntithesis.Sets.Deriving
 
 /-! Exercises subsetoids (carrier, inclusion, respectfulness) and quotients (the
 collapsing congruence, projection, and universal property). -/
