@@ -14,3 +14,5 @@ import LeanAntithesis.Sets.Deriving
 import LeanAntithesis.Sets.SetoidAlgebra
 import LeanAntithesis.Sets.Subsetoid
 import LeanAntithesis.Sets.Quotient
+import LeanAntithesis.Sets.Discrete
+import LeanAntithesis.Numbers.Integers
