@@ -92,6 +92,15 @@ structure Hom (X Y : ASetoid.{u}) where
 namespace Hom
 variable {X Y Z : ASetoid.{u}}
 
+/-- Morphisms are equal as soon as their underlying functions are — the `resp`
+field is a proposition (entailments are subsingletons). -/
+@[ext] theorem ext {f g : Hom X Y} (h : f.toFun = g.toFun) : f = g := by
+  obtain ⟨tf, rf⟩ := f
+  obtain ⟨tg, rg⟩ := g
+  obtain rfl : tf = tg := h
+  have hr : rf = rg := funext fun _ => funext fun _ => Subsingleton.elim _ _
+  rw [hr]
+
 /-- A morphism automatically **reflects** apartness. -/
 def reflect_apart (f : Hom X Y) (x x' : X) :
     Y.apart (f.toFun x) (f.toFun x') ⊢ X.apart x x' :=

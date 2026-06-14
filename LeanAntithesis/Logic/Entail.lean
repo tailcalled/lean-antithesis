@@ -28,6 +28,17 @@ def Entails (P : AProp.{u}) (Q : AProp.{v}) : Type (max u v) :=
 
 @[inherit_doc] scoped infix:50 " ⊢ " => Entails
 
+/-- An entailment is a **subsingleton**: its realizers are functions into the
+subsingleton evidence types of `Q`/`P`, so any two agree.  (This is what makes
+setoid morphisms equal as soon as their underlying functions are.) -/
+instance {P : AProp.{u}} {Q : AProp.{v}} : Subsingleton (P ⊢ Q) where
+  allEq a b := by
+    obtain ⟨a₁, a₂⟩ := a
+    obtain ⟨b₁, b₂⟩ := b
+    obtain rfl : a₁ = b₁ := funext fun _ => Subsingleton.elim _ _
+    obtain rfl : a₂ = b₂ := funext fun _ => Subsingleton.elim _ _
+    rfl
+
 /-- Entailment is, definitionally, the validity of linear implication. -/
 theorem entails_eq_holds_limp (P Q : AProp.{u}) : (P ⊢ Q) = Holds (P.limp Q) := rfl
 

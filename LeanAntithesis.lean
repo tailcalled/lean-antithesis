@@ -12,3 +12,5 @@ import LeanAntithesis.Math.ComplementedSet
 import LeanAntithesis.Math.Equivalence
 import LeanAntithesis.Math.Deriving
 import LeanAntithesis.Math.SetoidAlgebra
+import LeanAntithesis.Math.Subsetoid
+import LeanAntithesis.Math.Quotient
