@@ -15,4 +15,5 @@ import LeanAntithesis.Sets.SetoidAlgebra
 import LeanAntithesis.Sets.Subsetoid
 import LeanAntithesis.Sets.Quotient
 import LeanAntithesis.Sets.Discrete
+import LeanAntithesis.Sets.Morphism
 import LeanAntithesis.Numbers.Integers

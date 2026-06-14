@@ -7,7 +7,9 @@ Standard constructions making `AEquiv` (Bishop sets) closed under the basic
 type formers, so the antithesis setoids form a usable universe:
 
 * **products** `α × β` and **sums** `α ⊕ β` — these are plain inductives, so the
-  `derive_aequiv` handler produces them (and their apartness) for free;
+  `derive_aequiv` handler produces them (and their apartness) for free.  The derived
+  `α × β` is the **cartesian product** in the category of setoids: it has projections
+  and a pairing with the universal property (`ASetoid.prod`/`fst`/`snd`/`pair`);
 * the **function setoid** `α → β` — *not* inductive, built by hand: `f ~ g` is the
   universal `⨅ x, f x ~ g x`, and dually apartness `f # g` is the existential
   `⨆ x, f x # g x` ("the functions differ *somewhere*").  Reflexivity/symmetry are
@@ -23,6 +25,49 @@ open scoped Antithesis
 
 derive_aequiv Prod
 derive_aequiv Sum
+
+/-! ## The cartesian product of setoids
+
+The derived `α × β` is additive (related in both coordinates, apart in some
+coordinate), which is exactly the categorical product: projections plus a pairing
+`with_intro`-style, with the universal property. -/
+
+namespace ASetoid
+
+/-- The product setoid `X × Y`, using the derived `AEquiv` on the carrier product. -/
+def prod (X Y : ASetoid.{u}) : ASetoid.{u} :=
+  letI := X.eqv; letI := Y.eqv; .of (X.carrier × Y.carrier)
+
+variable {X Y Z : ASetoid.{u}}
+
+/-- First projection. -/
+def fst : Hom (X.prod Y) X :=
+  letI := X.eqv; letI := Y.eqv
+  ⟨Prod.fst, fun _ _ => ⟨Trunc'.elimProp fun h => match h with | .mk hp _ => hp,
+                          fun hn => Trunc'.mk (.mk_0 hn)⟩⟩
+
+/-- Second projection. -/
+def snd : Hom (X.prod Y) Y :=
+  letI := X.eqv; letI := Y.eqv
+  ⟨Prod.snd, fun _ _ => ⟨Trunc'.elimProp fun h => match h with | .mk _ hp => hp,
+                          fun hn => Trunc'.mk (.mk_1 hn)⟩⟩
+
+/-- Pairing — the universal map. -/
+def pair (f : Hom Z X) (g : Hom Z Y) : Hom Z (X.prod Y) :=
+  letI := X.eqv; letI := Y.eqv
+  ⟨fun z => (f.toFun z, g.toFun z),
+   fun z z' => ⟨fun h => Trunc'.mk (.mk ((f.resp z z').1 h) ((g.resp z z').1 h)),
+     Trunc'.elimProp fun a => match a with
+       | .mk_0 hn => (f.resp z z').2 hn
+       | .mk_1 hn => (g.resp z z').2 hn⟩⟩
+
+/-- Universal property of the product: `pair` factors the projections, uniquely. -/
+@[simp] theorem fst_pair (f : Hom Z X) (g : Hom Z Y) : fst.comp (pair f g) = f := Hom.ext rfl
+@[simp] theorem snd_pair (f : Hom Z X) (g : Hom Z Y) : snd.comp (pair f g) = g := Hom.ext rfl
+theorem pair_unique (h : Hom Z (X.prod Y)) :
+    pair (fst.comp h) (snd.comp h) = h := Hom.ext rfl
+
+end ASetoid
 
 /-! ## The function setoid
 

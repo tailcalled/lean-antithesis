@@ -1,4 +1,4 @@
-import LeanAntithesis.Sets.Discrete
+import LeanAntithesis.Sets.Morphism
 import Mathlib.Data.Int.Notation
 
 /-!
@@ -28,5 +28,22 @@ def negHom : ASetoid.Hom (.of ℤ) (.of ℤ) := ⟨Int.neg, discrete.resp Int.ne
 /-- Translation by a fixed integer is a morphism. -/
 def addHom (k : ℤ) : ASetoid.Hom (.of ℤ) (.of ℤ) :=
   ⟨fun n : ℤ => n + k, discrete.resp fun n : ℤ => n + k⟩
+
+/-! ## Congruence witnesses for the arithmetic operations
+
+Being discrete, every operation respects `~`, so all the congruence instances are
+populated by the `discrete.cong*` builders. -/
+
+instance : NegCong ℤ := ⟨discrete.cong₁ fun a => -a⟩
+instance : AddCong ℤ := ⟨discrete.cong₂ (· + ·)⟩
+instance : SubCong ℤ := ⟨discrete.cong₂ (· - ·)⟩
+instance : MulCong ℤ := ⟨discrete.cong₂ (· * ·)⟩
+
+-- the witnesses are now available by instance resolution
+example {a a' b b' : ℤ} :
+    AEquiv.rel a a' ⊓ AEquiv.rel b b' ⊢ AEquiv.rel (a + b) (a' + b') := AddCong.add_cong
+example {a a' b b' : ℤ} :
+    AEquiv.rel a a' ⊓ AEquiv.rel b b' ⊢ AEquiv.rel (a * b) (a' * b') := MulCong.mul_cong
+example {a a' : ℤ} : AEquiv.rel a a' ⊢ AEquiv.rel (-a) (-a') := NegCong.neg_cong
 
 end Antithesis

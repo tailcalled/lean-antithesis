@@ -40,4 +40,13 @@ example : Valid (AEquiv.apart (fun _ : Bool => E.a) (fun _ => E.b)) :=
 -- the function setoid is a first-class object
 example : ASetoid := ASetoid.of (Bool → E)
 
+/-! ## The product is cartesian -/
+
+variable (f g : ASetoid.Hom (.of E) (.of E))
+
+example : ASetoid.fst.comp (ASetoid.pair f g) = f := ASetoid.fst_pair f g
+example : ASetoid.snd.comp (ASetoid.pair f g) = g := ASetoid.snd_pair f g
+example (h : ASetoid.Hom (.of E) ((ASetoid.of E).prod (.of E))) :
+    ASetoid.pair (ASetoid.fst.comp h) (ASetoid.snd.comp h) = h := ASetoid.pair_unique h
+
 end Antithesis

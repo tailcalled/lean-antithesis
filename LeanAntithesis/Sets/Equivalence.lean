@@ -72,8 +72,9 @@ namespace ASetoid
 
 instance : CoeSort ASetoid.{u} (Type u) := ⟨carrier⟩
 
-/-- Bundle a type with its `AEquiv` instance. -/
-def of (α : Type u) [e : AEquiv α] : ASetoid.{u} := ⟨α, e⟩
+/-- Bundle a type with its `AEquiv` instance.  `@[reducible]` so `(of α).carrier`
+defeq-reduces to `α` during instance search (e.g. `HAdd` on `(of ℤ).carrier`). -/
+@[reducible] def of (α : Type u) [e : AEquiv α] : ASetoid.{u} := ⟨α, e⟩
 
 variable (X : ASetoid.{u})
 
