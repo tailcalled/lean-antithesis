@@ -33,6 +33,10 @@ variable {α β : Type}
 def rel_of_eq {x y : α} (h : x = y) : Valid ((discrete α).rel x y) :=
   Valid.of_holds (Trunc'.mk ⟨h⟩)
 
+/-- …and conversely: a valid discrete equality is a propositional one. -/
+def eq_of_rel {x y : α} (h : Valid ((discrete α).rel x y)) : x = y :=
+  (Trunc'.elimProp (fun p => p) h.holds).down
+
 /-- Unequal elements are apart. -/
 def apart_of_ne {x y : α} (h : x ≠ y) : Valid ((discrete α).rel x y)ᗮ :=
   Valid.of_holds (Trunc'.mk ⟨h⟩)

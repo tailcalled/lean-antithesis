@@ -11,8 +11,17 @@ named context of `AProp` resources (reflected as `Seq Γ G`).
   (one name renames; two names split a `⊗`; etc.).
 * `lspecialize h a` — instantiate a `⨅`-resource `h` at the witness `a`.
 * `lexists a` — supply a witness for a `⨆`-goal.
+* `lmap h e` — rewrite resource `h` forward along an entailment `e : A ⊢ A'`.
+* `lcut e` — rewrite the goal backward along `e : G' ⊢ G` (cut on the right).
+* `lhave h e` — add `h : Q` to the context from a fact `e : Valid Q`.
+* `lcombine h h₁ h₂ e` — apply a binary lemma `e : A ⊗ B ⊢ C` to the resources
+  named `h₁`, `h₂` (any positions), replacing them by `h : C`.
+* `lwith` — split a `⊓`-goal into two subgoals over the same context.
+* `lproj h fst`/`lproj h snd` — project a `⊓`-resource to one component.
+* `lswap` — exchange the head two resources (rarely needed).
 * `lweaken h` — discard a resource (affine).
 * `lclose` — finish: hand the propositional residue to the `antithesis` solver.
+* `lexact e` — finish with an explicit entailment `e : (resources) ⊢ G`.
 
 Every tactic only ever `refine`s a lemma from `Linear.lean`, so it cannot
 produce an unsound proof.
@@ -41,9 +50,10 @@ def getSeqGoal : TacticM (Array (Expr × Expr) × Expr) := do
   | (``Seq, #[Γ, G]) => return (parseCtx Γ, G)
   | _ => throwError "not a `linear` goal (expected `Seq Γ G`); run `linear` first"
 
-/-- Enter linear proof mode from a bare entailment `A ⊢ G`. -/
+/-- Enter linear proof mode from a bare entailment `A ⊢ G` (also sees through
+reducible wrappers like `Valid A = ⊤ ⊢ A`). -/
 elab "linear" : tactic => do
-  match (← getMainTarget).getAppFnArgs with
+  match (← whnfR (← getMainTarget)).getAppFnArgs with
   | (``Seq, _) => pure ()
   | (``Entails, _) => evalTactic (← `(tactic| refine Seq.ofEntails (n := "this") ?_))
   | _ => throwError "`linear` expects a goal of the form `A ⊢ G`"
@@ -79,23 +89,78 @@ def findRes (target : String) : TacticM Nat := do
   | some i => return i
   | none => throwError "no resource named `{target}`"
 
+/-- Bring the resource named `target` to the head of the context (no-op if already
+there).  Resources are addressed by name; the tactic handles the reordering. -/
+def pullToHead (target : String) : TacticM Unit := do
+  match ← findRes target with
+  | 0 => pure ()
+  | i =>
+    let iStx := Syntax.mkNatLit i
+    evalTactic (← `(tactic| refine Seq.pullToFront $iStx ?_; dsimp only [LCtx.pull]))
+
 /-- Instantiate a `⨅`-resource `h` at witness `a`. -/
 elab "lspecialize" h:(colGt ident) a:(colGt term) : tactic => do
-  match ← findRes h.getId.toString with
-  | 0 => evalTactic (← `(tactic| refine Seq.specialize $a ?_))
-  | 1 => evalTactic (← `(tactic| refine Seq.swap ?_; refine Seq.specialize $a ?_))
-  | i => throwError "resource is at depth {i}; only head/second supported"
+  pullToHead h.getId.toString
+  evalTactic (← `(tactic| refine Seq.specialize $a ?_))
 
 /-- Provide a witness `a` for a `⨆`-goal. -/
 elab "lexists" a:(colGt term) : tactic => do
   evalTactic (← `(tactic| refine Seq.exists_intro $a ?_))
 
+/-- Rewrite a resource `h` forward along an entailment `e : A ⊢ A'`. -/
+elab "lmap" h:(colGt ident) e:(colGt term) : tactic => do
+  pullToHead h.getId.toString
+  evalTactic (← `(tactic| refine Seq.mapHead $e ?_))
+
+/-- Rewrite the goal backward along an entailment `e : G' ⊢ G` (cut on the right). -/
+elab "lcut" e:(colGt term) : tactic => do
+  evalTactic (← `(tactic| refine Seq.cutGoal $e ?_))
+
+/-- Introduce an established fact as a new head resource: `lhave h e` with
+`e : Valid Q` adds `h : Q` to the context.  This is how positivity (or any
+conditionally-proven fact) enters the sequent. -/
+elab "lhave" h:(colGt ident) e:(colGt term) : tactic => do
+  let nm := Syntax.mkStrLit h.getId.toString
+  evalTactic (← `(tactic| refine Seq.haveR (n := $nm) $e ?_))
+
+/-- Apply a binary lemma `e : A ⊗ B ⊢ C` to the resources named `h₁` and `h₂`
+(in any positions), replacing them by one resource `h : C`.  The reordering is
+automatic — you only name the hypotheses. -/
+elab "lcombine" h:(colGt ident) h₁:(colGt ident) h₂:(colGt ident) e:(colGt term) : tactic => do
+  pullToHead h₂.getId.toString      -- h₂ to the front …
+  pullToHead h₁.getId.toString      -- … then h₁, leaving the context as [h₁, h₂, …]
+  let nm := Syntax.mkStrLit h.getId.toString
+  evalTactic (← `(tactic| refine Seq.combine (n := $nm) $e ?_))
+
+/-- Split a `⊓`-goal `… ⊢ P ⊓ Q` into two subgoals `… ⊢ P` and `… ⊢ Q`, each over
+the same context (additive/cartesian — the context is shared).  Combined with
+`lcut`, this proves congruence goals natively: `lcut add_cong; lwith; …`. -/
+elab "lwith" : tactic => do
+  evalTactic (← `(tactic| refine Seq.withIntro ?_ ?_))
+
+/-- Project a `⊓`-resource `h : P ⊓ Q` to one component: `lproj h fst` keeps `P`,
+`lproj h snd` keeps `Q` (discarding the other — `⊓` has no contraction). -/
+elab "lproj" h:(colGt ident) side:(colGt ident) : tactic => do
+  pullToHead h.getId.toString
+  let proj ← match side.getId.toString with
+    | "fst" => `(Antithesis.with_fst)
+    | "snd" => `(Antithesis.with_snd)
+    | s => throwError "lproj: side must be `fst` or `snd`, got `{s}`"
+  evalTactic (← `(tactic| refine Seq.mapHead $proj ?_))
+
+/-- Exchange the head two resources (rarely needed — `lcombine`/`lmap` reorder
+by name automatically). -/
+elab "lswap" : tactic => do
+  evalTactic (← `(tactic| refine Seq.swap ?_))
+
+/-- Finish by handing an explicit entailment `e : (resources) ⊢ G` to close. -/
+elab "lexact" e:(colGt term) : tactic => do
+  evalTactic (← `(tactic| refine Seq.closeClean ?_; simp only [LCtx.clean]; exact $e))
+
 /-- Discard the resource named `h` (affine weakening). -/
 elab "lweaken" h:(colGt ident) : tactic => do
-  match ← findRes h.getId.toString with
-  | 0 => evalTactic (← `(tactic| refine Seq.weaken ?_))
-  | 1 => evalTactic (← `(tactic| refine Seq.swap ?_; refine Seq.weaken ?_))
-  | i => throwError "resource is at depth {i}; only head/second supported"
+  pullToHead h.getId.toString
+  evalTactic (← `(tactic| refine Seq.weaken ?_))
 
 /-- Finish a linear proof: strip the context's units and let the solver build
 the realizer. -/

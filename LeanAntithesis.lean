@@ -7,6 +7,7 @@ import LeanAntithesis.Logic.Tactic
 import LeanAntithesis.Logic.Calculus
 import LeanAntithesis.Logic.Linear
 import LeanAntithesis.Logic.LinearTactic
+import LeanAntithesis.Logic.AffineLint
 import LeanAntithesis.Sets.Examples
 import LeanAntithesis.Sets.ComplementedSet
 import LeanAntithesis.Sets.Equivalence
@@ -16,4 +17,8 @@ import LeanAntithesis.Sets.Subsetoid
 import LeanAntithesis.Sets.Quotient
 import LeanAntithesis.Sets.Discrete
 import LeanAntithesis.Sets.Morphism
+import LeanAntithesis.Numbers.Rationals
 import LeanAntithesis.Numbers.Integers
+import LeanAntithesis.Numbers.Reals
+import LeanAntithesis.Algebra.Ring
+import LeanAntithesis.Algebra.RingSolver
