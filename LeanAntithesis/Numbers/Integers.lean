@@ -1,4 +1,5 @@
 import LeanAntithesis.Sets.Morphism
+import LeanAntithesis.Sets.Ordering
 import LeanAntithesis.Algebra.Ring
 import LeanAntithesis.Logic.AffineLint
 import Mathlib.Data.Int.Notation
@@ -79,18 +80,11 @@ is in the calculus.  `Rationals.lean` builds the rational order on top of these.
 def intLE (a b : ℤ) : AProp.{0} :=
   AProp.ofTypes (PLift (a ≤ b)) (PLift (b < a)) fun p q => absurd p.down (Int.not_le.mpr q.down)
 
-/-- Strict affine order on `ℤ`: affirmation `a < b`, refutation `b ≤ a`.  (Carries
-positivity facts inside the calculus, e.g. `intLT 0 c` is "`c` is positive".) -/
-def intLT (a b : ℤ) : AProp.{0} :=
-  AProp.ofTypes (PLift (a < b)) (PLift (b ≤ a)) fun p q => absurd p.down (Int.not_lt.mpr q.down)
-
-/-- Positivity as a calculus fact. -/
-def intLE.nonneg {c : ℤ} (h : 0 ≤ c) : Valid (intLE 0 c) := Valid.of_holds (Trunc'.mk ⟨h⟩)
-/-- Strict positivity as a calculus fact. -/
-def intLT.pos {c : ℤ} (h : 0 < c) : Valid (intLT 0 c) := Valid.of_holds (Trunc'.mk ⟨h⟩)
-
 namespace intLE
 variable {a b c : ℤ}
+
+/-! ### Bootstrap laws.  These three *build* the `AOrd ℤ` instance — i.e. they are what
+`≤ₐ`/`≈ₐ` *reduce to* for `ℤ` — so they must be phrased in terms of `intLE` directly. -/
 
 /-- Reflexivity. -/
 def refl (a : ℤ) : Valid (intLE a a) := Valid.of_holds (Trunc'.mk ⟨Int.le_refl a⟩)
@@ -101,45 +95,84 @@ def trans : intLE a b ⊗ intLE b c ⊢ intLE a c :=
     (fun p r => ⟨Int.lt_of_lt_of_le r.down p.down⟩)
     (fun q r => ⟨Int.lt_of_le_of_lt q.down r.down⟩)
 
+/-- Antisymmetry — pinches the order down to the (discrete) equivalence. -/
+def antisymm : intLE a b ⊗ intLE b a ⊢ AEquiv.rel a b :=
+  AProp.ofTypes_tensor
+    (fun h1 h2 => ⟨by have := h1.down; have := h2.down; omega⟩)
+    (fun h1 r => ⟨by have := h1.down; have := r.down; omega⟩)
+    (fun h2 r => ⟨by have := h2.down; have := r.down; omega⟩)
+
+end intLE
+
+/-- `ℤ` is an affine **order**: `≤ₐ` is `intLE`.  Defined here, right after the bootstrap
+laws, so that the order lemmas below can be stated with the `≤ₐ`/`<ₐ`/`≈ₐ` notation. -/
+instance : AOrd ℤ where
+  le := intLE
+  le_refl := intLE.refl
+  le_trans _ _ _ := intLE.trans
+  le_antisymm _ _ := intLE.antisymm
+
+namespace intLE
+variable {a b c : ℤ}
+
+/-- Nonnegativity as a calculus fact. -/
+def nonneg (h : 0 ≤ c) : Valid (0 ≤ₐ c) := Valid.of_holds (Trunc'.mk ⟨h⟩)
+
+/-- Strict positivity `0 < c`, in the **derived** strict order `0 <ₐ c` (`= (intLE c 0)ᗮ`). -/
+def gt_zero (h : 0 < c) : Valid (0 <ₐ c) := Valid.of_holds (Trunc'.mk ⟨h⟩)
+
 /-- Translation is monotone. -/
-def addRight (c : ℤ) : intLE a b ⊢ intLE (a + c) (b + c) :=
+def addRight (c : ℤ) : (a ≤ₐ b) ⊢ (a + c ≤ₐ b + c) :=
   AProp.ofTypes_mono (fun p => ⟨Int.add_le_add_right p.down c⟩)
     (fun q => ⟨Int.lt_of_add_lt_add_right q.down⟩)
 
 /-- Scaling: the nonnegativity of the factor is a **hypothesis in the sequent**
-(`intLE 0 c`), so it composes with conditionally-established positivity. -/
-def mulRight : intLE 0 c ⊗ intLE a b ⊢ intLE (a * c) (b * c) :=
+(`0 ≤ₐ c`), so it composes with conditionally-established positivity. -/
+def mulRight : (0 ≤ₐ c) ⊗ (a ≤ₐ b) ⊢ (a * c ≤ₐ b * c) :=
   AProp.ofTypes_tensor (fun hc hab => ⟨Int.mul_le_mul_of_nonneg_right hab.down hc.down⟩)
     (fun hc r => ⟨Int.lt_of_mul_lt_mul_right r.down hc.down⟩)
     (fun hab r => ⟨Int.not_le.mp fun hc =>
       absurd (Int.mul_le_mul_of_nonneg_right hab.down hc) (Int.not_le.mpr r.down)⟩)
 
-/-- Cancelling a factor whose **positivity is a sequent hypothesis** (`intLT 0 c`). -/
-def cancelMul : intLT 0 c ⊗ intLE (a * c) (b * c) ⊢ intLE a b :=
-  AProp.ofTypes_tensor (fun hc hm => ⟨Int.le_of_mul_le_mul_right hm.down hc.down⟩)
-    (fun hc r => ⟨Int.mul_lt_mul_of_pos_right r.down hc.down⟩)
-    (fun hm r => ⟨Int.not_lt.mp fun hc =>
-      absurd (Int.mul_lt_mul_of_pos_right r.down hc) (Int.not_lt.mpr hm.down)⟩)
+/-- Workhorse cancellation, with positivity as `1 ≤ c` (⟺ `0 < c` on `ℤ`). -/
+def cancelMul₁ : (1 ≤ₐ c) ⊗ (a * c ≤ₐ b * c) ⊢ (a ≤ₐ b) :=
+  AProp.ofTypes_tensor
+    (fun hc hm => ⟨Int.le_of_mul_le_mul_right hm.down (by have := hc.down; omega)⟩)
+    (fun hc r => ⟨Int.mul_lt_mul_of_pos_right r.down (by have := hc.down; omega)⟩)
+    (fun hm r => ⟨Int.not_le.mp fun h1 =>
+      absurd (Int.mul_lt_mul_of_pos_right r.down (show (0:ℤ) < c by omega))
+        (Int.not_lt.mpr hm.down)⟩)
+
+/-- The derived strict positivity `0 <ₐ c` entails `1 ≤ c` on `ℤ`. -/
+def one_le_of_pos : (0 <ₐ c) ⊢ (1 ≤ₐ c) :=
+  ⟨Trunc'.map fun p => ⟨by have := p.down; omega⟩,
+   Trunc'.map fun p => ⟨by have := p.down; omega⟩⟩
+
+/-- Cancelling a **strictly positive** factor — positivity supplied on the sequent as the
+derived strict order `0 <ₐ c`. -/
+def cancelMul : (0 <ₐ c) ⊗ (a * c ≤ₐ b * c) ⊢ (a ≤ₐ b) :=
+  cut (tensor_mono one_le_of_pos (Entails.refl _)) cancelMul₁
 
 /-- Rewrite the endpoints along integer equalities (transport the relation). -/
-def ofEq {a b a' b' : ℤ} (ha : a = a') (hb : b = b') : intLE a b ⊢ intLE a' b' := by
+def ofEq {a b a' b' : ℤ} (ha : a = a') (hb : b = b') : (a ≤ₐ b) ⊢ (a' ≤ₐ b') := by
   rw [ha, hb]; exact Entails.refl _
 
 /-- Transport the **left** endpoint along an affine equality carried *on the sequent*:
-with `a ≈ a'` as a hypothesis, rewrite `intLE a b` to `intLE a' b`.  (`aring` supplies the
-`a ≈ a'` resource.)  The equality lives in the antecedent, not as a `Valid` parameter. -/
-def congrL {a a' b : ℤ} : AEquiv.rel a a' ⊗ intLE a b ⊢ intLE a' b :=
+with `a ≈ₐ a'` as a hypothesis, rewrite `a ≤ₐ b` to `a' ≤ₐ b` (`aring` supplies the
+`a ≈ₐ a'` resource).  The equality lives in the antecedent, not as a `Valid` parameter. -/
+def congrL {a a' b : ℤ} : (a ≈ₐ a') ⊗ (a ≤ₐ b) ⊢ (a' ≤ₐ b) :=
   AProp.ofTypes_tensor
     (fun ha hab => ⟨by have := ha.down; have := hab.down; omega⟩)
     (fun ha r => ⟨by have := ha.down; have := r.down; omega⟩)
     (fun hab r => ⟨by have := hab.down; have := r.down; omega⟩)
 
 /-- Transport the **right** endpoint along an affine equality carried on the sequent. -/
-def congrR {a b b' : ℤ} : AEquiv.rel b b' ⊗ intLE a b ⊢ intLE a b' :=
+def congrR {a b b' : ℤ} : (b ≈ₐ b') ⊗ (a ≤ₐ b) ⊢ (a ≤ₐ b') :=
   AProp.ofTypes_tensor
     (fun hb hab => ⟨by have := hb.down; have := hab.down; omega⟩)
     (fun hb r => ⟨by have := hb.down; have := r.down; omega⟩)
     (fun hab r => ⟨by have := hab.down; have := r.down; omega⟩)
 
 end intLE
+
 end Antithesis

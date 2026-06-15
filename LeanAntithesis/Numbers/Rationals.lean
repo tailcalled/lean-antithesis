@@ -77,20 +77,46 @@ def aLE.trans {a b c : Frac} : aLE a b ⊗ aLE b c ⊢ aLE a c := by
   lhave pa (intLE.nonneg (Int.le_of_lt a.den_pos))
   lcombine sbc pa hbc intLE.mulRight
   -- align the shared middle term, then transitivity
-  lhave em (show Valid (AEquiv.rel (b.num * a.den * c.den) (b.num * c.den * a.den)) by aring)
+  lhave em (show Valid (b.num * a.den * c.den ≈ₐ b.num * c.den * a.den) by aring)
   lcombine sab' em sab intLE.congrR
   lcombine t sab' sbc intLE.trans
   -- refactor both endpoints into `· * b.den` form, then cancel `b.den`
-  lhave el (show Valid (AEquiv.rel (a.num * b.den * c.den) (a.num * c.den * b.den)) by aring)
+  lhave el (show Valid (a.num * b.den * c.den ≈ₐ a.num * c.den * b.den) by aring)
   lcombine t1 el t intLE.congrL
-  lhave er (show Valid (AEquiv.rel (c.num * b.den * a.den) (c.num * a.den * b.den)) by aring)
+  lhave er (show Valid (c.num * b.den * a.den ≈ₐ c.num * a.den * b.den) by aring)
   lcombine t2 er t1 intLE.congrR
-  lhave pb (intLT.pos b.den_pos)
+  lhave pb (intLE.gt_zero b.den_pos)
   lcombine r pb t2 intLE.cancelMul
   lexact (Entails.refl _)
 
-/-- Apartness of rationals: strict order one way or the other. -/
-def aApart (a b : Frac) : AProp.{0} := (aLE a b)ᗮ
+/-- Transitivity of rational equality: the cross-products chain by cancelling the
+middle denominator (which is positive, hence nonzero). -/
+theorem crossEq_trans {a b c : Frac}
+    (h₁ : a.num * b.den = b.num * a.den) (h₂ : b.num * c.den = c.num * b.den) :
+    a.num * c.den = c.num * a.den :=
+  mul_right_cancel₀ b.den_pos.ne' <| calc
+    a.num * c.den * b.den = a.num * b.den * c.den := by ring
+    _ = b.num * a.den * c.den := by rw [h₁]
+    _ = b.num * c.den * a.den := by ring
+    _ = c.num * b.den * a.den := by rw [h₂]
+    _ = c.num * a.den * b.den := by ring
+
+/-- `Frac` is an affine **order** (hence affine equivalence).  `≤ₐ` is `aLE`; equality
+`≈ₐ` is resolved **directly** as equality of the integer cross-products `(a.num*b.den) ≈ₐ
+(b.num*a.den)` (not `aLE`-both-ways).  Antisymmetry is then exactly the integer
+antisymmetry on the cross-products, and `<ₐ`/apartness come for free as De Morgan duals. -/
+instance : AOrd Frac where
+  rel a b := a.num * b.den ≈ₐ b.num * a.den
+  refl a := AEquiv.refl (a.num * a.den)
+  symm a b := AEquiv.symm (a.num * b.den) (b.num * a.den)
+  trans _ _ _ := AProp.ofTypes_tensor
+    (fun h₁ h₂ => ⟨crossEq_trans h₁.down h₂.down⟩)
+    (fun h₁ hz => ⟨fun h₂ => hz.down (crossEq_trans h₁.down h₂)⟩)
+    (fun h₂ hz => ⟨fun h₁ => hz.down (crossEq_trans h₁ h₂.down)⟩)
+  le := aLE
+  le_refl := aLE.refl
+  le_trans _ _ _ := aLE.trans
+  le_antisymm a b := AOrd.le_antisymm (a.num * b.den) (b.num * a.den)
 
 end Frac
 end Antithesis

@@ -11,6 +11,7 @@ import LeanAntithesis.Logic.AffineLint
 import LeanAntithesis.Sets.Examples
 import LeanAntithesis.Sets.ComplementedSet
 import LeanAntithesis.Sets.Equivalence
+import LeanAntithesis.Sets.Ordering
 import LeanAntithesis.Sets.Deriving
 import LeanAntithesis.Sets.SetoidAlgebra
 import LeanAntithesis.Sets.Subsetoid

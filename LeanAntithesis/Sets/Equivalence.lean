@@ -32,11 +32,15 @@ class AEquiv (α : Type u) where
   /-- Transitivity (multiplicative — composes via `cut`). -/
   trans : ∀ x y z, rel x y ⊗ rel y z ⊢ rel x z
 
+@[inherit_doc] scoped infix:50 " ≈ₐ " => AEquiv.rel
+
 namespace AEquiv
 variable {α : Type u} [AEquiv α]
 
 /-- The induced **apartness** `x # y`, the antithesis of `x ~ y`. -/
 def apart (x y : α) : AProp.{u} := (rel x y)ᗮ
+
+@[inherit_doc] scoped infix:50 " #ₐ " => AEquiv.apart
 
 /-- Apartness is **irreflexive** — reflexivity dualized (`x # x ⊢ ⊥`). -/
 def apart_irrefl (x : α) : apart x x ⊢ AProp.bot := perp_mono (refl x)
