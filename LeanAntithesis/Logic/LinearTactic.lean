@@ -107,10 +107,14 @@ elab "lspecialize" h:(colGt ident) a:(colGt term) : tactic => do
 elab "lexists" a:(colGt term) : tactic => do
   evalTactic (← `(tactic| refine Seq.exists_intro $a ?_))
 
-/-- Rewrite a resource `h` forward along an entailment `e : A ⊢ A'`. -/
+/-- Rewrite a resource `h` forward along an entailment `e : A ⊢ A'`.  If `h : !P` is a
+duplicable resource and `e`'s domain is the underlying `P`, the dereliction is inserted
+automatically (`!P ⊢ P ⊢ A'`). -/
 elab "lmap" h:(colGt ident) e:(colGt term) : tactic => do
   pullToHead h.getId.toString
-  evalTactic (← `(tactic| refine Seq.mapHead $e ?_))
+  evalTactic (← `(tactic| first
+    | refine Seq.mapHead $e ?_
+    | refine Seq.mapHead (Antithesis.cut Antithesis.derelict $e) ?_))
 
 /-- Use a **duplicable** (`!`-)resource without consuming it: from `h : !P`, keep `h : !P`
 and add a fresh derelicted copy `hp : P`.  The contraction/dereliction is handled for you —
@@ -123,6 +127,16 @@ elab "ldup" h:(colGt ident) hp:(colGt ident) : tactic => do
     (Antithesis.tensor_mono (Antithesis.Entails.refl _) Antithesis.derelict)) ?_))
   let n₁ := Syntax.mkStrLit h.getId.toString
   let n₂ := Syntax.mkStrLit hp.getId.toString
+  evalTactic (← `(tactic| refine Seq.split (n₁ := $n₁) (n₂ := $n₂) ?_))
+
+/-- Make a `!`-copy of a duplicable resource: from `h : !P`, keep `h : !P` and add another
+`hc : !P`.  Use this to feed a `!P` to an entailment (e.g. an induction hypothesis whose
+*domain* is `!P`) while keeping the persistent original. -/
+elab "lcopy" h:(colGt ident) hc:(colGt ident) : tactic => do
+  pullToHead h.getId.toString
+  evalTactic (← `(tactic| refine Seq.mapHead Antithesis.bang_contract ?_))
+  let n₁ := Syntax.mkStrLit h.getId.toString
+  let n₂ := Syntax.mkStrLit hc.getId.toString
   evalTactic (← `(tactic| refine Seq.split (n₁ := $n₁) (n₂ := $n₂) ?_))
 
 /-- Rewrite the goal backward along an entailment `e : G' ⊢ G` (cut on the right). -/
@@ -138,12 +152,21 @@ elab "lhave" h:(colGt ident) e:(colGt term) : tactic => do
 
 /-- Apply a binary lemma `e : A ⊗ B ⊢ C` to the resources named `h₁` and `h₂`
 (in any positions), replacing them by one resource `h : C`.  The reordering is
-automatic — you only name the hypotheses. -/
+automatic — you only name the hypotheses.  If either of `h₁`/`h₂` is a duplicable `!P`
+resource and the lemma's corresponding factor is the underlying `P`, the dereliction is
+inserted automatically. -/
 elab "lcombine" h:(colGt ident) h₁:(colGt ident) h₂:(colGt ident) e:(colGt term) : tactic => do
   pullToHead h₂.getId.toString      -- h₂ to the front …
   pullToHead h₁.getId.toString      -- … then h₁, leaving the context as [h₁, h₂, …]
   let nm := Syntax.mkStrLit h.getId.toString
-  evalTactic (← `(tactic| refine Seq.combine (n := $nm) $e ?_))
+  let dL ← `(Antithesis.tensor_mono Antithesis.derelict (Antithesis.Entails.refl _))
+  let dR ← `(Antithesis.tensor_mono (Antithesis.Entails.refl _) Antithesis.derelict)
+  let dB ← `(Antithesis.tensor_mono Antithesis.derelict Antithesis.derelict)
+  evalTactic (← `(tactic| first
+    | refine Seq.combine (n := $nm) $e ?_
+    | refine Seq.combine (n := $nm) (Antithesis.cut $dL $e) ?_
+    | refine Seq.combine (n := $nm) (Antithesis.cut $dR $e) ?_
+    | refine Seq.combine (n := $nm) (Antithesis.cut $dB $e) ?_))
 
 /-- Split a `⊓`-goal `… ⊢ P ⊓ Q` into two subgoals `… ⊢ P` and `… ⊢ Q`, each over
 the same context (additive/cartesian — the context is shared).  Combined with
@@ -166,19 +189,35 @@ by name automatically). -/
 elab "lswap" : tactic => do
   evalTactic (← `(tactic| refine Seq.swap ?_))
 
-/-- Finish by handing an explicit entailment `e : (resources) ⊢ G` to close. -/
-elab "lexact" e:(colGt term) : tactic => do
-  evalTactic (← `(tactic| refine Seq.closeClean ?_; simp only [LCtx.clean]; exact $e))
-
 /-- Discard the resource named `h` (affine weakening). -/
 elab "lweaken" h:(colGt ident) : tactic => do
   pullToHead h.getId.toString
   evalTactic (← `(tactic| refine Seq.weaken ?_))
 
-/-- Finish a linear proof: strip the context's units and let the solver build
-the realizer. -/
-macro "lclose" : tactic =>
-  `(tactic| (refine Seq.closeClean ?_; simp only [LCtx.clean]; antithesis))
+/-- Discard every remaining duplicable (`!`-)resource — the persistent zone is freely
+weakenable, so closing tactics drop it automatically (you never weaken persistent
+resources by hand). -/
+partial def weakenPersistent : TacticM Unit := do
+  let (Γ, _) ← getSeqGoal
+  for (nmE, ty) in Γ do
+    if ty.getAppFnArgs.1 == ``AProp.bang then
+      if let some nm := nameOf? nmE then
+        pullToHead nm
+        evalTactic (← `(tactic| refine Seq.weaken ?_))
+        weakenPersistent
+        return
+
+/-- Finish by handing an explicit entailment `e : (resources) ⊢ G` to close.  Any leftover
+`!`-resources (the persistent zone) are discarded first. -/
+elab "lexact" e:(colGt term) : tactic => do
+  weakenPersistent
+  evalTactic (← `(tactic| refine Seq.closeClean ?_; simp only [LCtx.clean]; exact $e))
+
+/-- Finish a linear proof: drop the persistent zone, strip the context's units, and let the
+solver build the realizer. -/
+elab "lclose" : tactic => do
+  weakenPersistent
+  evalTactic (← `(tactic| refine Seq.closeClean ?_; simp only [LCtx.clean]; antithesis))
 
 /-! ## Pretty-printing the linear goal
 

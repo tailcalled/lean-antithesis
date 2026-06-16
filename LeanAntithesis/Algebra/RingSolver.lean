@@ -28,55 +28,23 @@ namespace ARing
 
 /-- `-0 ≈ 0`. -/
 def neg_zero : Valid (AEquiv.rel (-(0 : R)) 0) := by
-  linear; lweaken this
-  lhave h₁ (relSymm (zero_add (-(0 : R))))   -- -0 ≈ 0 + -0
-  lhave h₂ (add_neg_cancel (0 : R))          -- 0 + -0 ≈ 0
-  lcombine r h₁ h₂ (AEquiv.trans ..)
-  lexact (Entails.refl _)
+  arw [relSymm (zero_add (-(0 : R))), add_neg_cancel (0 : R)]
 
 /-- `- -a ≈ a` (double negation). -/
 def neg_neg (a : R) : Valid (AEquiv.rel (- -a) a) := by
-  linear; lweaken this
-  lhave h₁ (relSymm (add_zero (- -a)))                 -- - -a ≈ - -a + 0
-  lhave h₂ (addCongV (AEquiv.refl (- -a)) (relSymm (neg_add_cancel a)))
-                                                       -- ≈ - -a + (-a + a)
-  lhave h₃ (relSymm (add_assoc (- -a) (-a) a))         -- ≈ (- -a + -a) + a
-  lhave h₄ (addCongV (neg_add_cancel (-a)) (AEquiv.refl a))  -- ≈ 0 + a
-  lhave h₅ (zero_add a)                                -- ≈ a
-  lcombine s₁ h₁ h₂ (AEquiv.trans ..)
-  lcombine s₂ s₁ h₃ (AEquiv.trans ..)
-  lcombine s₃ s₂ h₄ (AEquiv.trans ..)
-  lcombine r s₃ h₅ (AEquiv.trans ..)
-  lexact (Entails.refl _)
+  arw [relSymm (add_zero (- -a)), relSymm (neg_add_cancel a),
+       relSymm (add_assoc (- -a) (-a) a), neg_add_cancel (-a), zero_add a]
 
 /-- `-(a + b) ≈ -a + -b` (negation distributes over `+`, using commutativity). -/
 def neg_add (a b : R) : Valid (AEquiv.rel (-(a + b)) (-a + -b)) := by
-  linear; lweaken this
-  lhave h₁ (relSymm (add_zero (-(a + b))))
-  lhave h₂ (addCongV (AEquiv.refl (-(a + b))) (relSymm (cancel_sum a b)))
-  lhave h₃ (relSymm (add_assoc (-(a + b)) (a + b) (-a + -b)))
-  lhave h₄ (addCongV (neg_add_cancel (a + b)) (AEquiv.refl (-a + -b)))
-  lhave h₅ (zero_add (-a + -b))
-  lcombine s₁ h₁ h₂ (AEquiv.trans ..)
-  lcombine s₂ s₁ h₃ (AEquiv.trans ..)
-  lcombine s₃ s₂ h₄ (AEquiv.trans ..)
-  lcombine r s₃ h₅ (AEquiv.trans ..)
-  lexact (Entails.refl _)
+  arw [relSymm (add_zero (-(a + b))), relSymm (cancel_sum a b),
+       relSymm (add_assoc (-(a + b)) (a + b) (-a + -b)),
+       neg_add_cancel (a + b), zero_add (-a + -b)]
 where
   /-- `(a + b) + (-a + -b) ≈ 0`. -/
   cancel_sum (a b : R) : Valid (AEquiv.rel ((a + b) + (-a + -b)) 0) := by
-    linear; lweaken this
-    lhave h₁ (add_assoc a b (-a + -b))
-    lhave h₂ (addCongV (AEquiv.refl a) (add_left_comm b (-a) (-b)))
-    lhave h₃ (addCongV (AEquiv.refl a)
-                (addCongV (AEquiv.refl (-a)) (add_neg_cancel b)))
-    lhave h₄ (addCongV (AEquiv.refl a) (add_zero (-a)))
-    lhave h₅ (add_neg_cancel a)
-    lcombine s₁ h₁ h₂ (AEquiv.trans ..)
-    lcombine s₂ s₁ h₃ (AEquiv.trans ..)
-    lcombine s₃ s₂ h₄ (AEquiv.trans ..)
-    lcombine r s₃ h₅ (AEquiv.trans ..)
-    lexact (Entails.refl _)
+    arw [add_assoc a b (-a + -b), add_left_comm b (-a) (-b), add_neg_cancel b,
+         add_zero (-a), add_neg_cancel a]
 
 /-! ## Group/ring cancellation helpers and the multiplicative sign lemmas
 
@@ -89,9 +57,9 @@ set_option linter.affineHyp false in
 def cancel_self {x : R} (h : Valid (AEquiv.rel x (x + x))) : Valid (AEquiv.rel x 0) := by
   linear; lweaken this
   lhave h0 (relSymm (neg_add_cancel x))                  -- 0 ≈ -x + x
-  lhave h1 (addCongV (AEquiv.refl (-x)) h)               -- -x + x ≈ -x + (x + x)
+  lhave h1 (addApp (AEquiv.refl (-x)) h)               -- -x + x ≈ -x + (x + x)
   lhave h2 (relSymm (add_assoc (-x) x x))                -- ≈ (-x + x) + x
-  lhave h3 (addCongV (neg_add_cancel x) (AEquiv.refl x)) -- ≈ 0 + x
+  lhave h3 (addApp (neg_add_cancel x) (AEquiv.refl x)) -- ≈ 0 + x
   lhave h4 (zero_add x)                                  -- ≈ x
   lcombine s1 h0 h1 (AEquiv.trans ..)
   lcombine s2 s1 h2 (AEquiv.trans ..)
@@ -106,9 +74,9 @@ def eq_neg_of_add_zero {x y : R} (h : Valid (AEquiv.rel (x + y) 0)) :
     Valid (AEquiv.rel x (-y)) := by
   linear; lweaken this
   lhave h1 (relSymm (add_zero x))                                  -- x ≈ x + 0
-  lhave h2 (addCongV (AEquiv.refl x) (relSymm (add_neg_cancel y))) -- ≈ x + (y + -y)
+  lhave h2 (addApp (AEquiv.refl x) (relSymm (add_neg_cancel y))) -- ≈ x + (y + -y)
   lhave h3 (relSymm (add_assoc x y (-y)))                          -- ≈ (x + y) + -y
-  lhave h4 (addCongV h (AEquiv.refl (-y)))                         -- ≈ 0 + -y
+  lhave h4 (addApp h (AEquiv.refl (-y)))                         -- ≈ 0 + -y
   lhave h5 (zero_add (-y))                                         -- ≈ -y
   lcombine s1 h1 h2 (AEquiv.trans ..)
   lcombine s2 s1 h3 (AEquiv.trans ..)
@@ -118,26 +86,22 @@ def eq_neg_of_add_zero {x y : R} (h : Valid (AEquiv.rel (x + y) 0)) :
 
 /-- `a * 0 ≈ 0`. -/
 def mul_zero (a : R) : Valid (AEquiv.rel (a * 0) 0) :=
-  cancel_self (relTrans (mulCongV (AEquiv.refl a) (relSymm (add_zero 0))) (left_distrib a 0 0))
+  cancel_self (by arw [relSymm (add_zero (0 : R)), left_distrib a 0 0])
 
 /-- `0 * a ≈ 0`. -/
-def zero_mul (a : R) : Valid (AEquiv.rel (0 * a) 0) := relTrans (mul_comm 0 a) (mul_zero a)
+def zero_mul (a : R) : Valid (AEquiv.rel (0 * a) 0) := by arw [mul_comm 0 a, mul_zero a]
 
 /-- `(-a) * b ≈ -(a * b)`. -/
 def neg_mul (a b : R) : Valid (AEquiv.rel (-a * b) (-(a * b))) :=
-  eq_neg_of_add_zero
-    (relTrans (relSymm (right_distrib (-a) a b))
-      (relTrans (mulCongV (neg_add_cancel a) (AEquiv.refl b)) (zero_mul b)))
+  eq_neg_of_add_zero (by arw [relSymm (right_distrib (-a) a b), neg_add_cancel a, zero_mul b])
 
 /-- `a * (-b) ≈ -(a * b)`. -/
 def mul_neg (a b : R) : Valid (AEquiv.rel (a * -b) (-(a * b))) :=
-  eq_neg_of_add_zero
-    (relTrans (relSymm (left_distrib a (-b) b))
-      (relTrans (mulCongV (AEquiv.refl a) (neg_add_cancel b)) (mul_zero a)))
+  eq_neg_of_add_zero (by arw [relSymm (left_distrib a (-b) b), neg_add_cancel b, mul_zero a])
 
 /-- `(-a) * (-b) ≈ a * b`. -/
-def neg_mul_neg (a b : R) : Valid (AEquiv.rel (-a * -b) (a * b)) :=
-  relTrans (neg_mul a (-b)) (relTrans (negCongV (mul_neg a b)) (neg_neg (a * b)))
+def neg_mul_neg (a b : R) : Valid (AEquiv.rel (-a * -b) (a * b)) := by
+  arw [neg_mul a (-b), mul_neg a b, neg_neg (a * b)]
 
 /-! ## Reflected ring expressions
 
@@ -188,7 +152,7 @@ def sumR_append : (l₁ l₂ : List R) →
     Valid (AEquiv.rel (sumR (l₁ ++ l₂)) (sumR l₁ + sumR l₂))
   | [], l₂ => relSymm (zero_add (sumR l₂))
   | x :: xs, l₂ =>
-    relTrans (addCongV (AEquiv.refl x) (sumR_append xs l₂))
+    relTrans (addApp (AEquiv.refl x) (sumR_append xs l₂))
       (relSymm (add_assoc x (sumR xs) (sumR l₂)))
 
 /-- `prodR` turns `++` into `*`. -/
@@ -196,7 +160,7 @@ def prodR_append : (l₁ l₂ : List R) →
     Valid (AEquiv.rel (prodR (l₁ ++ l₂)) (prodR l₁ * prodR l₂))
   | [], l₂ => relSymm (one_mul (prodR l₂))
   | x :: xs, l₂ =>
-    relTrans (mulCongV (AEquiv.refl x) (prodR_append xs l₂))
+    relTrans (mulApp (AEquiv.refl x) (prodR_append xs l₂))
       (relSymm (mul_assoc x (prodR xs) (prodR l₂)))
 
 /-- `monEval` turns `++` into `*`. -/
@@ -222,7 +186,7 @@ def polyEval_neg (env : List R) :
   | [] => neg_zero
   | t :: ts =>
     relTrans (neg_add (termEval env t) (polyEval env ts))
-      (addCongV (relSymm (termEval_flip env t)) (polyEval_neg env ts))
+      (addApp (relSymm (termEval_flip env t)) (polyEval_neg env ts))
 
 /-- Product of two signed monomials: XNOR the signs, concatenate the monomials. -/
 def prodTerm : Bool × List Nat → Bool × List Nat → Bool × List Nat
@@ -234,10 +198,10 @@ def prodTerm_sound (env : List R) :
       Valid (AEquiv.rel (termEval env (prodTerm t u)) (termEval env t * termEval env u))
   | (true, m₁), (true, m₂) => monEval_append env m₁ m₂
   | (true, m₁), (false, m₂) =>
-    relTrans (negCongV (monEval_append env m₁ m₂))
+    relTrans (negApp (monEval_append env m₁ m₂))
       (relSymm (mul_neg (monEval env m₁) (monEval env m₂)))
   | (false, m₁), (true, m₂) =>
-    relTrans (negCongV (monEval_append env m₁ m₂))
+    relTrans (negApp (monEval_append env m₁ m₂))
       (relSymm (neg_mul (monEval env m₁) (monEval env m₂)))
   | (false, m₁), (false, m₂) =>
     relTrans (monEval_append env m₁ m₂)
@@ -249,7 +213,7 @@ def singleDistrib (env : List R) (t : Bool × List Nat) :
       Valid (AEquiv.rel (polyEval env (q.map (prodTerm t))) (termEval env t * polyEval env q))
   | [] => relSymm (mul_zero (termEval env t))
   | u :: us =>
-    relTrans (addCongV (prodTerm_sound env t u) (singleDistrib env t us))
+    relTrans (addApp (prodTerm_sound env t u) (singleDistrib env t us))
       (relSymm (left_distrib (termEval env t) (termEval env u) (polyEval env us)))
 
 /-- Multiply two polynomials (all pairwise monomial products). -/
@@ -264,7 +228,7 @@ def distribute_sound (env : List R) :
   | [], q => relSymm (zero_mul (polyEval env q))
   | t :: ts, q =>
     relTrans (polyEval_append env (q.map (prodTerm t)) (distribute ts q))
-      (relTrans (addCongV (singleDistrib env t q) (distribute_sound env ts q))
+      (relTrans (addApp (singleDistrib env t q) (distribute_sound env ts q))
         (relSymm (right_distrib (termEval env t) (polyEval env ts) (polyEval env q))))
 
 /-- Reify into the signed-monomial normal form (before sorting/cancelling). -/
@@ -284,12 +248,12 @@ def RingExpr.toPoly_sound (env : List R) :
   | .zero => AEquiv.refl _
   | .one => relSymm (add_zero 1)
   | .add a b =>
-    relTrans (addCongV (a.toPoly_sound env) (b.toPoly_sound env))
+    relTrans (addApp (a.toPoly_sound env) (b.toPoly_sound env))
       (relSymm (polyEval_append env a.toPoly b.toPoly))
   | .mul a b =>
-    relTrans (mulCongV (a.toPoly_sound env) (b.toPoly_sound env))
+    relTrans (mulApp (a.toPoly_sound env) (b.toPoly_sound env))
       (relSymm (distribute_sound env a.toPoly b.toPoly))
-  | .neg a => relTrans (negCongV (a.toPoly_sound env)) (polyEval_neg env a.toPoly)
+  | .neg a => relTrans (negApp (a.toPoly_sound env)) (polyEval_neg env a.toPoly)
 
 /-! ## Canonicalisation: sort the atoms in each monomial, sort the terms, then cancel
 inverse pairs.  Only **soundness** is proved — the decision step needs `polyEval
@@ -310,7 +274,7 @@ def monEval_insert (env : List R) (i : Nat) :
     simp only [insertNat]
     split
     · exact AEquiv.refl _
-    · exact relTrans (mulCongV (AEquiv.refl (env.getD j 0)) (monEval_insert env i js))
+    · exact relTrans (mulApp (AEquiv.refl (env.getD j 0)) (monEval_insert env i js))
         (mul_left_comm (env.getD j 0) (env.getD i 0) (monEval env js))
 
 /-- Sort the atoms in a monomial. -/
@@ -322,13 +286,13 @@ def sortMon_sound (env : List R) :
   | [] => AEquiv.refl _
   | i :: is =>
     relTrans (monEval_insert env i (sortMon is))
-      (mulCongV (AEquiv.refl (env.getD i 0)) (sortMon_sound env is))
+      (mulApp (AEquiv.refl (env.getD i 0)) (sortMon_sound env is))
 
 /-- Normalising a term's monomial is sound. -/
 def termEval_sortMon (env : List R) :
     (t : Bool × List Nat) → Valid (AEquiv.rel (termEval env (t.1, sortMon t.2)) (termEval env t))
   | (true, m) => sortMon_sound env m
-  | (false, m) => negCongV (sortMon_sound env m)
+  | (false, m) => negApp (sortMon_sound env m)
 
 /-- Sort the atoms of every monomial in a polynomial. -/
 def normMonos (p : List (Bool × List Nat)) : List (Bool × List Nat) :=
@@ -339,7 +303,7 @@ def normMonos_sound (env : List R) :
     (p : List (Bool × List Nat)) →
       Valid (AEquiv.rel (polyEval env (normMonos p)) (polyEval env p))
   | [] => AEquiv.refl _
-  | t :: ts => addCongV (termEval_sortMon env t) (normMonos_sound env ts)
+  | t :: ts => addApp (termEval_sortMon env t) (normMonos_sound env ts)
 
 /-- A total (lexicographic) order on monomials, for sorting terms. -/
 def monLe : List Nat → List Nat → Bool
@@ -361,7 +325,7 @@ def insertTerm_sound (env : List R) (t : Bool × List Nat) :
     simp only [insertTerm]
     split
     · exact AEquiv.refl _
-    · exact relTrans (addCongV (AEquiv.refl (termEval env u)) (insertTerm_sound env t us))
+    · exact relTrans (addApp (AEquiv.refl (termEval env u)) (insertTerm_sound env t us))
         (add_left_comm (termEval env u) (termEval env t) (polyEval env us))
 
 /-- Insertion sort the terms by monomial. -/
@@ -374,7 +338,7 @@ def sortTerms_sound (env : List R) :
   | [] => AEquiv.refl _
   | t :: ts =>
     relTrans (insertTerm_sound env t (sortTerms ts))
-      (addCongV (AEquiv.refl (termEval env t)) (sortTerms_sound env ts))
+      (addApp (AEquiv.refl (termEval env t)) (sortTerms_sound env ts))
 
 /-- One pass cancelling an adjacent inverse pair (same monomial, opposite sign). -/
 def cancelStep : List (Bool × List Nat) → List (Bool × List Nat)
@@ -406,10 +370,10 @@ def cancelStep_sound (env : List R) :
       obtain ⟨hi, hs⟩ := hc
       exact relTrans (cancelStep_sound env rest)
         (relTrans (relSymm (zero_add (polyEval env rest)))
-          (relTrans (addCongV (relSymm (termEval_cancel env hi hs)) (AEquiv.refl _))
+          (relTrans (addApp (relSymm (termEval_cancel env hi hs)) (AEquiv.refl _))
             (add_assoc (termEval env t) (termEval env u) (polyEval env rest))))
     next _ =>
-      exact addCongV (AEquiv.refl (termEval env t)) (cancelStep_sound env (u :: rest))
+      exact addApp (AEquiv.refl (termEval env t)) (cancelStep_sound env (u :: rest))
 
 /-- Iterate cancellation to a fixed point. -/
 def cancel (p : List (Bool × List Nat)) : List (Bool × List Nat) := cancelStep^[p.length] p

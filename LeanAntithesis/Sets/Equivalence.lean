@@ -61,6 +61,31 @@ theorem compl_singleton (a : α) : (singleton a)ᶜ = fun x => apart a x := rfl
 
 end AEquiv
 
+/-! ## Composing valid equalities
+
+The two fundamental ways to combine *closed* equality facts (`Valid (x ≈ y)`): transitivity
+and symmetry.  These are the `Valid`-level wrappers of the `AEquiv.trans`/`AEquiv.symm`
+sequents, used pervasively in term-mode reasoning (e.g. the reflective `aring` soundness
+proofs).  They live here, with the `AEquiv` basics, rather than in any one algebraic layer. -/
+
+variable {R : Type u} [AEquiv R]
+
+/-- Compose two valid equalities (multiplicative transitivity at `⊤`). -/
+def relTrans {x y z : R}
+    (h₁ : Valid (AEquiv.rel x y)) (h₂ : Valid (AEquiv.rel y z)) : Valid (AEquiv.rel x z) :=
+  cut (cut unit_tensor (tensor_mono h₁ h₂)) (AEquiv.trans x y z)
+
+/-- Flip a valid equality. -/
+def relSymm {x y : R} (h : Valid (AEquiv.rel x y)) : Valid (AEquiv.rel y x) :=
+  cut h (AEquiv.symm x y)
+
+/-- Transport the **left** endpoint of an equality goal along a valid equality:
+`(x' ≈ y) ⊢ (x ≈ y)` given `x ≈ x'`.  This is what lets `arw` rewrite the left side of an
+equality goal — including a proof-mode `Seq … (x ≈ y)` goal via `Seq.cutGoal`. -/
+def relCongrL {x x' y : R} (h : Valid (AEquiv.rel x x')) :
+    AEquiv.rel x' y ⊢ AEquiv.rel x y :=
+  cut unit_tensor (cut tensor_comm (cut (tensor_mono h (Entails.refl _)) (AEquiv.trans x x' y)))
+
 /-! ## Setoids: types equipped with an affine equivalence relation -/
 
 /-- A type bundled with an affine equivalence relation — a "set" in the
