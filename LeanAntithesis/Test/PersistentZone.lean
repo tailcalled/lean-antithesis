@@ -1,4 +1,5 @@
 import LeanAntithesis.Algebra.OrderedRing
+import LeanAntithesis.Sets.AffineRw
 import LeanAntithesis.Numbers.Integers
 
 /-! Tests for the **persistent zone**: duplicable (`!`-)resources in the `linear` proof mode.
@@ -40,5 +41,25 @@ example {a : ℤ} : ！(0 ≤ₐ a) ⊢ (0 ≤ₐ a + a) := by
   lcopy this hc
   lcombine s this hc AOrderedRing.add_nonneg
   lexact (Entails.refl _)
+
+/-! ### `arw` rewriting by context resources -/
+
+/-- `arw` rewrites the goal by a **linear** context equality, consuming it. -/
+example {a x y : ℤ} : (x ≈ₐ y) ⊢ (x + a ≈ₐ y + a) := by
+  linear; lintro h; arw [h]
+
+/-- `arw` rewrites by a **duplicable** (`!`-)context equality — a copy is taken (so the
+resource persists, discarded only at the close), and both occurrences of `x` are rewritten. -/
+example {x y : ℤ} : ！(x ≈ₐ y) ⊢ (x + x ≈ₐ y + y) := by
+  linear; lintro h; arw [h]
+
+/-- A duplicable context equality is genuinely reused: `arw [h]` in *both* branches of the
+`⊓` (the resource is shared additively and persists through each rewrite). -/
+example {x y : ℤ} : ！(x ≈ₐ y) ⊢ ((x ≈ₐ y) ⊓ (x ≈ₐ y)) := by
+  linear
+  lintro h
+  lwith
+  · arw [h]
+  · arw [h]
 
 end Antithesis
