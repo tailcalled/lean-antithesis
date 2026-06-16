@@ -112,6 +112,19 @@ elab "lmap" h:(colGt ident) e:(colGt term) : tactic => do
   pullToHead h.getId.toString
   evalTactic (← `(tactic| refine Seq.mapHead $e ?_))
 
+/-- Use a **duplicable** (`!`-)resource without consuming it: from `h : !P`, keep `h : !P`
+and add a fresh derelicted copy `hp : P`.  The contraction/dereliction is handled for you —
+this is how a `!`-hypothesis is reused (e.g. across the steps of an induction) in the
+otherwise affine context.  `lweaken h` discards it when no longer needed. -/
+elab "ldup" h:(colGt ident) hp:(colGt ident) : tactic => do
+  pullToHead h.getId.toString
+  -- `!P  ⊢  !P ⊗ P`  (contract, then derelict the second copy), then split the two off
+  evalTactic (← `(tactic| refine Seq.mapHead (Antithesis.cut Antithesis.bang_contract
+    (Antithesis.tensor_mono (Antithesis.Entails.refl _) Antithesis.derelict)) ?_))
+  let n₁ := Syntax.mkStrLit h.getId.toString
+  let n₂ := Syntax.mkStrLit hp.getId.toString
+  evalTactic (← `(tactic| refine Seq.split (n₁ := $n₁) (n₂ := $n₂) ?_))
+
 /-- Rewrite the goal backward along an entailment `e : G' ⊢ G` (cut on the right). -/
 elab "lcut" e:(colGt term) : tactic => do
   evalTactic (← `(tactic| refine Seq.cutGoal $e ?_))

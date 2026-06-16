@@ -1,5 +1,6 @@
 import LeanAntithesis.Algebra.Ring
 import Mathlib.Logic.Function.Iterate
+import LeanAntithesis.Logic.AffineLint
 
 /-!
 # A reflective solver for affine commutative rings (`aring`)
@@ -77,8 +78,13 @@ where
     lcombine r s₃ h₅ (AEquiv.trans ..)
     lexact (Entails.refl _)
 
-/-! ## Group/ring cancellation helpers and the multiplicative sign lemmas -/
+/-! ## Group/ring cancellation helpers and the multiplicative sign lemmas
 
+`cancel_self`/`eq_neg_of_add_zero` transform a closed equality theorem into another, term
+level, as part of the reflective ring derivations; they take `Valid` arguments by nature, so
+the `affineHyp` linter is disabled for them. -/
+
+set_option linter.affineHyp false in
 /-- From `x ≈ x + x` conclude `x ≈ 0` (cancel `x` on the left). -/
 def cancel_self {x : R} (h : Valid (AEquiv.rel x (x + x))) : Valid (AEquiv.rel x 0) := by
   linear; lweaken this
@@ -94,6 +100,7 @@ def cancel_self {x : R} (h : Valid (AEquiv.rel x (x + x))) : Valid (AEquiv.rel x
   lmap s4 (AEquiv.symm 0 x)
   lexact (Entails.refl _)
 
+set_option linter.affineHyp false in
 /-- From `x + y ≈ 0` conclude `x ≈ -y` (`x` is the additive inverse of `y`). -/
 def eq_neg_of_add_zero {x y : R} (h : Valid (AEquiv.rel (x + y) 0)) :
     Valid (AEquiv.rel x (-y)) := by
@@ -467,6 +474,17 @@ partial def reifyRing (atoms : IO.Ref (Array Expr)) (zeroE oneE : Expr) (e : Exp
         (mkApp (mkConst ``RingExpr.neg) (← reifyRing atoms zeroE oneE b))
   | (``Neg.neg, #[_, _, a]) =>
       return mkApp (mkConst ``RingExpr.neg) (← reifyRing atoms zeroE oneE a)
+  | (``OfNat.ofNat, #[_, n, _]) =>
+      -- a numeral `k` (with `0`/`1` already handled above) is `1 + 1 + … + 0`, so that
+      -- `aring` knows e.g. `2 * b ≈ b + b`.  Sound: the final `isDefEq` check rejects any
+      -- carrier on which `1 + … + 0` is not defeq to the numeral.
+      match n with
+      | .lit (.natVal k) =>
+          let mut r := mkConst ``RingExpr.zero
+          for _ in [0:k] do
+            r := mkApp2 (mkConst ``RingExpr.add) (mkConst ``RingExpr.one) r
+          return r
+      | _ => reifyAtom atoms e
   | _ => reifyAtom atoms e
 where
   /-- Look up (or register) an opaque subterm as an atom. -/

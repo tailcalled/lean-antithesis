@@ -1,6 +1,7 @@
 import LeanAntithesis.Sets.Morphism
 import LeanAntithesis.Sets.Ordering
 import LeanAntithesis.Algebra.Ring
+import LeanAntithesis.Algebra.OrderedRing
 import LeanAntithesis.Logic.AffineLint
 import Mathlib.Data.Int.Notation
 import Mathlib.Tactic.Ring
@@ -111,6 +112,8 @@ instance : AOrd ℤ where
   le_refl := intLE.refl
   le_trans _ _ _ := intLE.trans
   le_antisymm _ _ := intLE.antisymm
+  le_of_eq :=
+    AProp.ofTypes_mono (fun h => ⟨by have := h.down; omega⟩) (fun h => ⟨by have := h.down; omega⟩)
 
 namespace intLE
 variable {a b c : ℤ}
@@ -174,5 +177,15 @@ def congrR {a b b' : ℤ} : (b ≈ₐ b') ⊗ (a ≤ₐ b) ⊢ (a ≤ₐ b') :=
     (fun hab r => ⟨by have := hab.down; have := r.down; omega⟩)
 
 end intLE
+
+/-- `ℤ` is an affine **ordered ring**: addition and nonnegative scaling are monotone. -/
+instance : AOrderedRing ℤ where
+  add_le_add :=
+    AProp.ofTypes_tensor
+      (fun h1 h2 => ⟨by have := h1.down; have := h2.down; omega⟩)
+      (fun h1 r => ⟨by have := h1.down; have := r.down; omega⟩)
+      (fun h2 r => ⟨by have := h2.down; have := r.down; omega⟩)
+  mul_le_mul_right := intLE.mulRight
+  zero_le_one := intLE.nonneg (by omega)
 
 end Antithesis

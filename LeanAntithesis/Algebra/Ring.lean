@@ -1,5 +1,6 @@
 import LeanAntithesis.Sets.Morphism
 import LeanAntithesis.Logic.LinearTactic
+import LeanAntithesis.Logic.AffineLint
 
 /-!
 # Affine commutative rings
@@ -19,15 +20,23 @@ solver normalises against.
 namespace Antithesis
 open scoped Antithesis
 
-/-! ## Generic `AEquiv` reasoning helpers (compose `Valid` equalities). -/
+/-! ## Generic `AEquiv` reasoning helpers (compose `Valid` equalities).
+
+These compose/flip **closed** equality theorems at the term level — their sequent-style
+equivalents are the class fields `AEquiv.trans`/`AEquiv.symm` (used directly in proof mode).
+They legitimately take `Valid` arguments (there is no non-trivial sequent to host a *closed*
+theorem on), and they are needed in term-mode/reflective definitions where the proof mode is
+unavailable, so the `affineHyp` linter is switched off for them. -/
 
 variable {R : Type}
 
+set_option linter.affineHyp false in
 /-- Compose two valid equalities (multiplicative transitivity at `⊤`). -/
 def relTrans [AEquiv R] {x y z : R}
     (h₁ : Valid (AEquiv.rel x y)) (h₂ : Valid (AEquiv.rel y z)) : Valid (AEquiv.rel x z) :=
   cut (cut unit_tensor (tensor_mono h₁ h₂)) (AEquiv.trans x y z)
 
+set_option linter.affineHyp false in
 /-- Flip a valid equality. -/
 def relSymm [AEquiv R] {x y : R}
     (h : Valid (AEquiv.rel x y)) : Valid (AEquiv.rel y x) :=
@@ -68,6 +77,13 @@ instance : AddCong R := ⟨ARing.add_cong'⟩
 instance : MulCong R := ⟨ARing.mul_cong'⟩
 instance : NegCong R := ⟨ARing.neg_cong'⟩
 
+/- The `*CongV` helpers lift **closed** equality theorems through the ring operations; the
+sequent-style congruences are the class fields `add_cong'`/`mul_cong'`/`neg_cong'` (and the
+proof-mode `lcut … ; lwith` they are built from).  As closed-theorem composers they take
+`Valid` arguments, so the `affineHyp` linter is off for them. -/
+section
+set_option linter.affineHyp false
+
 /-- Lift two valid equalities through `+` (the `+`-congruence), proved natively in
 the proof mode: cut the congruence onto the goal, then `lwith` splits the resulting
 `⊓`-goal into the two equality obligations. -/
@@ -91,6 +107,8 @@ def mulCongV {a a' b b' : R} (h₁ : Valid (AEquiv.rel a a')) (h₂ : Valid (AEq
 /-- Lift a valid equality through negation. -/
 def negCongV {a a' : R} (h : Valid (AEquiv.rel a a')) : Valid (AEquiv.rel (-a) (-a')) := by
   linear; lcut NegCong.neg_cong; lexact h
+
+end
 
 variable (a b c : R)
 

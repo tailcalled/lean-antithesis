@@ -23,3 +23,5 @@ import LeanAntithesis.Numbers.Integers
 import LeanAntithesis.Numbers.Reals
 import LeanAntithesis.Algebra.Ring
 import LeanAntithesis.Algebra.RingSolver
+import LeanAntithesis.Algebra.OrderedRing
+import LeanAntithesis.Algebra.LinarithSolver

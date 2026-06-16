@@ -94,6 +94,14 @@ def plus_elim (h₁ : P ⊢ R) (h₂ : Q ⊢ R) : P ⊔ Q ⊢ R :=
 /-- Dereliction `!P ⊢ P`. -/
 def derelict : AProp.bang P ⊢ P := by antithesis
 
+/-- Contraction `!P ⊢ !P ⊗ !P`: the exponential is freely duplicable.  This is what lets a
+hypothesis carried as `!P` be *reused* — e.g. across the steps of an induction — within the
+otherwise affine (no-contraction) calculus. -/
+def bang_contract : AProp.bang P ⊢ AProp.bang P ⊗ AProp.bang P := by antithesis
+
+/-- Weakening `!P ⊢ ⊤`: the exponential may also be discarded. -/
+def bang_weaken : AProp.bang P ⊢ AProp.top := by antithesis
+
 /-! ## Units and De Morgan -/
 
 def bot_entails : AProp.bot ⊢ P := by antithesis
