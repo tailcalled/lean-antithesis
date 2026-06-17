@@ -5,6 +5,7 @@ import LeanAntithesis.Algebra.OrderedRing
 import LeanAntithesis.Logic.AffineLint
 import Mathlib.Data.Int.Notation
 import Mathlib.Tactic.Ring
+import Mathlib.Algebra.Order.Ring.Abs
 
 /-!
 # The integers as an affine set
@@ -118,12 +119,6 @@ instance : AOrd ℤ where
 namespace intLE
 variable {a b c : ℤ}
 
-/-- Nonnegativity as a calculus fact. -/
-def nonneg (h : 0 ≤ c) : Valid (0 ≤ₐ c) := Valid.of_holds (Trunc'.mk ⟨h⟩)
-
-/-- Strict positivity `0 < c`, in the **derived** strict order `0 <ₐ c` (`= (intLE c 0)ᗮ`). -/
-def gt_zero (h : 0 < c) : Valid (0 <ₐ c) := Valid.of_holds (Trunc'.mk ⟨h⟩)
-
 /-- Translation is monotone. -/
 def addRight (c : ℤ) : (a ≤ₐ b) ⊢ (a + c ≤ₐ b + c) :=
   AProp.ofTypes_mono (fun p => ⟨Int.add_le_add_right p.down c⟩)
@@ -156,10 +151,6 @@ derived strict order `0 <ₐ c`. -/
 def cancelMul : (0 <ₐ c) ⊗ (a * c ≤ₐ b * c) ⊢ (a ≤ₐ b) :=
   cut (tensor_mono one_le_of_pos (Entails.refl _)) cancelMul₁
 
-/-- Rewrite the endpoints along integer equalities (transport the relation). -/
-def ofEq {a b a' b' : ℤ} (ha : a = a') (hb : b = b') : (a ≤ₐ b) ⊢ (a' ≤ₐ b') := by
-  rw [ha, hb]; exact Entails.refl _
-
 /-- Transport the **left** endpoint along an affine equality carried *on the sequent*:
 with `a ≈ₐ a'` as a hypothesis, rewrite `a ≤ₐ b` to `a' ≤ₐ b` (`aring` supplies the
 `a ≈ₐ a'` resource).  The equality lives in the antecedent, not as a `Valid` parameter. -/
@@ -176,7 +167,44 @@ def congrR {a b b' : ℤ} : (b ≈ₐ b') ⊗ (a ≤ₐ b) ⊢ (a ≤ₐ b') :=
     (fun hb r => ⟨by have := hb.down; have := r.down; omega⟩)
     (fun hab r => ⟨by have := hab.down; have := r.down; omega⟩)
 
+/-- Equality cancellation with positivity as `1 ≤ c` (`= ofTypes`, so `ofTypes_tensor` applies
+directly — `0 <ₐ c` is a `perp` and would not). -/
+def cancelMulRight₁ {a b c : ℤ} : (1 ≤ₐ c) ⊗ (a * c ≈ₐ b * c) ⊢ (a ≈ₐ b) :=
+  AProp.ofTypes_tensor
+    (fun hc hm => ⟨mul_right_cancel₀ (by have := hc.down; omega) hm.down⟩)
+    (fun hc r => ⟨fun e => r.down (mul_right_cancel₀ (by have := hc.down; omega) e)⟩)
+    (fun hm r => ⟨Int.not_le.mp fun h1 => r.down (mul_right_cancel₀ (by omega) hm.down)⟩)
+
+/-- Cancel a **strictly positive** factor from an integer equality — positivity **on the
+sequent** `(0 <ₐ c) ⊗ (a·c ≈ₐ b·c) ⊢ (a ≈ₐ b)`, the equality analogue of `cancelMul`. -/
+def cancelMulRight {a b c : ℤ} : (0 <ₐ c) ⊗ (a * c ≈ₐ b * c) ⊢ (a ≈ₐ b) :=
+  cut (tensor_mono one_le_of_pos (Entails.refl _)) cancelMulRight₁
+
+/-- The **triangle inequality** `|x + y| ≤ₐ |x| + |y|` — the one primitive fact about `|·|`. -/
+def abs_add (x y : ℤ) : Valid (|x + y| ≤ₐ |x| + |y|) :=
+  Valid.of_holds (Trunc'.mk ⟨abs_add_le x y⟩)
+
 end intLE
+
+/-! ### Absolute value on `ℤ` — the few atomic facts the rational `|·|` reduces to.
+
+`|·|` is not a ring operation, so its primitive facts are **affine atoms** (`Valid (… ≈ₐ …)`),
+their `ℤ` content discharged in plain Lean inside the atom (`natAbs` — `Classical`-free, unlike
+Mathlib's generic `abs_mul` — and `abs_of_pos`/`abs_neg`).  `Rationals` *composes* them
+(`AEquiv.trans`/`discrete.cong₁`/`addApp`); it never rewrites with a raw `ℤ` `|·|`-equation. -/
+
+/-- `|a·b| = |a|·|b|` on `ℤ`, via `natAbs` — the `ℤ` content behind `intAbsMulPos`. -/
+private theorem natAbs_mul (a b : ℤ) : |a * b| = |a| * |b| := by
+  rw [Int.abs_eq_natAbs, Int.natAbs_mul, Nat.cast_mul, Int.abs_eq_natAbs a, Int.abs_eq_natAbs b]
+
+/-- `|x·d| ≈ₐ |x|·d`, with nonnegativity of `d` **on the sequent** `(0 ≤ₐ d) ⊢ (|x·d| ≈ₐ |x|·d)`
+— refold a (nonnegative) denominator out of `|·|`. -/
+def intAbsMulPos (x : ℤ) {d : ℤ} : (0 ≤ₐ d) ⊢ (|x * d| ≈ₐ |x| * d) :=
+  AProp.ofTypes_mono (fun hd => ⟨by rw [natAbs_mul, abs_of_nonneg hd.down]⟩)
+    (fun hne => ⟨Int.not_le.mp fun hd => hne.down (by rw [natAbs_mul, abs_of_nonneg hd])⟩)
+
+/-- `|-x| ≈ₐ |x|`. -/
+def intAbsNeg (x : ℤ) : Valid (|-x| ≈ₐ |x|) := discrete.rel_of_eq (abs_neg x)
 
 /-- `ℤ` is an affine **ordered ring**: addition and nonnegative scaling are monotone. -/
 instance : AOrderedRing ℤ where
@@ -186,6 +214,6 @@ instance : AOrderedRing ℤ where
       (fun h1 r => ⟨by have := h1.down; have := r.down; omega⟩)
       (fun h2 r => ⟨by have := h2.down; have := r.down; omega⟩)
   mul_le_mul_right := intLE.mulRight
-  zero_le_one := intLE.nonneg (by omega)
+  zero_le_one := Valid.of_holds (Trunc'.mk ⟨by omega⟩)
 
 end Antithesis

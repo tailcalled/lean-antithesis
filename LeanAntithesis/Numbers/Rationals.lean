@@ -16,11 +16,16 @@ the strict reversal `b < a`.  The order laws are **sequents** built from the
 calculus — reflexivity is `Valid`, transitivity is the multiplicative `⊗ ⊢`
 (composing via `cut`).
 
-The whole development reduces to the affine order on `ℤ` (`intLE`, from
-`Integers.lean`): rationals compare by cross-multiplication, and every step is a
-calculus combinator (`cut`, `tensor_mono`, `intLE.mulRight`/`cancelMul`/`trans`/
-`ofEq`).  Only the atomic integer *identities* are discharged in plain Lean (`ring`),
-and `Int` order is axiom-pure — so the rational order is `Classical`-free.
+The whole development reduces to the affine order/equality on `ℤ`, and **`Integers.lean` owns
+all the atoms** — `intLE.*` (order), `discrete.*` (equality), `intLE.cancelMulRight`,
+`intLE.abs_add`, and the affine `|·|` facts `intAbsMulPos`/`intAbsNeg` (`Valid (… ≈ₐ …)`).
+Every rational lemma here is *pure composition*: calculus combinators (`cut`, `tensor_mono`,
+`intLE.mulRight`/`cancelMul`/`trans`, `intLE.congrL`/`congrR`, `intLE.abs_add`,
+`discrete.cong₁`, `addApp`, `relSymm`) plus the affine ring solver `aring` (on ℤ) for
+rearrangements and the transparent `Frac`→ℤ projection `rfl`s as the bridge.  The only
+`Frac`-level atoms are the structural denominator-positivity facts (`zero_le_den`/`zero_lt_den`,
+reflecting `den_pos`) and `le_of_forall_pos` (the Archimedean principle — decidability +
+fraction witness).  All `Classical`-free, so the rationals are.
 -/
 
 namespace Antithesis
@@ -73,6 +78,25 @@ instance : One Frac := ⟨1, 1, by omega⟩
 @[simp] theorem one_num : (1 : Frac).num = 1 := rfl
 @[simp] theorem one_den : (1 : Frac).den = 1 := rfl
 
+/-! ### Denominator positivity — the `Frac`-structural atoms (affine reflection of `den_pos`)
+
+These are the only `Frac`-level facts introduced by `Valid.of_holds`.  They are **specific**
+— they can introduce *only* a denominator's positivity, never an arbitrary `0 ≤ c` (so there
+is nothing to misuse in composition) — and they supply the sequent-side positivity that the
+order combinators `intLE.mulRight`/`cancelMul` consume. -/
+
+/-- A denominator is nonnegative. -/
+def zero_le_den (a : Frac) : Valid ((0 : ℤ) ≤ₐ a.den) := Valid.of_holds (Trunc'.mk ⟨a.den_pos.le⟩)
+
+/-- A denominator is strictly positive. -/
+def zero_lt_den (a : Frac) : Valid ((0 : ℤ) <ₐ a.den) := Valid.of_holds (Trunc'.mk ⟨a.den_pos⟩)
+
+/-- A **product** of denominators is nonnegative — *derived* in the calculus from the two
+single-denominator atoms (scale `0 ≤ₐ a.den` by `b.den`, then drop `0 · b.den` to `0`). -/
+def zero_le_den_mul (a b : Frac) : Valid ((0 : ℤ) ≤ₐ a.den * b.den) :=
+  cut (cut (cut unit_tensor (tensor_mono (zero_le_den b) (zero_le_den a))) intLE.mulRight)
+    (AOrd.le_congrL (show Valid ((0 : ℤ) * b.den ≈ₐ 0) by aring))
+
 /-! ## Order, in the affine calculus
 
 `aLE a b` reduces the rational order to the affine integer order `intLE` on the
@@ -85,20 +109,19 @@ def aLE (a b : Frac) : AProp.{0} := intLE (a.num * b.den) (b.num * a.den)
 /-- Reflexivity. -/
 def aLE.refl (a : Frac) : Valid (aLE a a) := intLE.refl _
 
-/-- Transitivity, **entirely on the sequent**: every fact — both denominators' (strict)
-positivities and every cross-product rearrangement — enters as a resource (`lhave`) and is
-consumed by a binary entailment (`lcombine`).  Scale each side by the other denominator
-(`intLE.mulRight`), align/transport the cross-products along affine ℤ equalities
-(`intLE.congrR`/`congrL`, with the `≈`-facts supplied by `aring`), chain with `intLE.trans`,
-and cancel the common positive factor (`intLE.cancelMul`).  No combinator takes an
-entailment as a *parameter*. -/
+/-- Transitivity, **in the calculus**: scale each side by the other denominator
+(`intLE.mulRight`, with the denominator-positivity atom `zero_le_den` supplied on the
+sequent), align/transport the cross-products along affine ℤ equalities (`intLE.congrR`/
+`congrL`, the `≈`-facts supplied by `aring`), chain with `intLE.trans`, and cancel the common
+positive factor (`intLE.cancelMul`, fed `zero_lt_den`).  Every side-condition is a sequent
+resource; no combinator takes a positivity *parameter*. -/
 def aLE.trans {a b c : Frac} : aLE a b ⊗ aLE b c ⊢ aLE a c := by
   linear
   lintro hab hbc
-  -- scale: hab by c.den, hbc by a.den (positivity on the sequent)
-  lhave pc (intLE.nonneg (Int.le_of_lt c.den_pos))
+  -- scale: hab by c.den, hbc by a.den (denominator positivity on the sequent)
+  lhave pc (zero_le_den c)
   lcombine sab pc hab intLE.mulRight
-  lhave pa (intLE.nonneg (Int.le_of_lt a.den_pos))
+  lhave pa (zero_le_den a)
   lcombine sbc pa hbc intLE.mulRight
   -- align the shared middle term, then transitivity
   lhave em (show Valid (b.num * a.den * c.den ≈ₐ b.num * c.den * a.den) by aring)
@@ -109,21 +132,31 @@ def aLE.trans {a b c : Frac} : aLE a b ⊗ aLE b c ⊢ aLE a c := by
   lcombine t1 el t intLE.congrL
   lhave er (show Valid (c.num * b.den * a.den ≈ₐ c.num * a.den * b.den) by aring)
   lcombine t2 er t1 intLE.congrR
-  lhave pb (intLE.gt_zero b.den_pos)
+  lhave pb (zero_lt_den b)
   lcombine r pb t2 intLE.cancelMul
   lexact (Entails.refl _)
 
-/-- Transitivity of rational equality: the cross-products chain by cancelling the
-middle denominator (which is positive, hence nonzero). -/
-theorem crossEq_trans {a b c : Frac}
-    (h₁ : a.num * b.den = b.num * a.den) (h₂ : b.num * c.den = c.num * b.den) :
-    a.num * c.den = c.num * a.den :=
-  mul_right_cancel₀ b.den_pos.ne' <| calc
-    a.num * c.den * b.den = a.num * b.den * c.den := by ring
-    _ = b.num * a.den * c.den := by rw [h₁]
-    _ = b.num * c.den * a.den := by ring
-    _ = c.num * b.den * a.den := by rw [h₂]
-    _ = c.num * a.den * b.den := by ring
+/-- Transitivity of rational equality, **entirely on the sequent** — the equality analogue of
+`aLE.trans`.  Scale each cross-product equality by the other denominator (`discrete.cong₁`),
+align/chain through the shared middle (`aring` rearrangements + `AEquiv.trans`), refactor both
+endpoints into `· * b.den` form, then cancel the positive `b.den` (`intLE.cancelMulRight`). -/
+def crossEq_trans {a b c : Frac} :
+    (a.num * b.den ≈ₐ b.num * a.den) ⊗ (b.num * c.den ≈ₐ c.num * b.den)
+      ⊢ (a.num * c.den ≈ₐ c.num * a.den) := by
+  linear
+  lintro h1 h2
+  lmap h1 (discrete.cong₁ (fun x : ℤ => x * c.den))
+  lmap h2 (discrete.cong₁ (fun x : ℤ => x * a.den))
+  lhave em (show Valid (b.num * a.den * c.den ≈ₐ b.num * c.den * a.den) by aring)
+  lcombine h1' h1 em (AEquiv.trans ..)
+  lcombine t h1' h2 (AEquiv.trans ..)
+  lhave el (show Valid (a.num * c.den * b.den ≈ₐ a.num * b.den * c.den) by aring)
+  lcombine t1 el t (AEquiv.trans ..)
+  lhave er (show Valid (c.num * b.den * a.den ≈ₐ c.num * a.den * b.den) by aring)
+  lcombine t2 t1 er (AEquiv.trans ..)
+  lhave pb (zero_lt_den b)
+  lcombine r pb t2 intLE.cancelMulRight
+  lexact (Entails.refl _)
 
 /-- `Frac` is an affine **order** (hence affine equivalence).  `≤ₐ` is `aLE`; equality
 `≈ₐ` is resolved **directly** as equality of the integer cross-products `(a.num*b.den) ≈ₐ
@@ -133,10 +166,7 @@ instance : AOrd Frac where
   rel a b := a.num * b.den ≈ₐ b.num * a.den
   refl a := AEquiv.refl (a.num * a.den)
   symm a b := AEquiv.symm (a.num * b.den) (b.num * a.den)
-  trans _ _ _ := AProp.ofTypes_tensor
-    (fun h₁ h₂ => ⟨crossEq_trans h₁.down h₂.down⟩)
-    (fun h₁ hz => ⟨fun h₂ => hz.down (crossEq_trans h₁.down h₂)⟩)
-    (fun h₂ hz => ⟨fun h₁ => hz.down (crossEq_trans h₁ h₂.down)⟩)
+  trans _ _ _ := crossEq_trans
   le := aLE
   le_refl := aLE.refl
   le_trans _ _ _ := aLE.trans
@@ -146,18 +176,27 @@ instance : AOrd Frac where
 /-! ## The commutative ring structure
 
 `Frac` equality is the integer cross-product equality, so every ring axiom is a valid
-`ℤ` identity (discharged by `ring` after unfolding the transparent operations), and the
-congruences are built from the forward cross-product implication (`cong₁`/`cong₂`,
-mirroring `discrete.cong₂` but with the arithmetic of fractions). -/
+`ℤ` ring identity — discharged by `frac_aring` (drop to ℤ via `rel_eq` + the projection
+`rfl`s, then the affine solver `aring`, **not** raw `ring`).  The congruences are built from
+the integer congruence (`discrete.cong₁`/`cong₂`) composed in the calculus. -/
 
-/-- A `Frac` equality from the integer cross-product identity. -/
+/-- A `Frac` equality from the integer cross-product **identity** (`=`) — for the `abs` atoms,
+where `aring` cannot apply. -/
 def rel_of_eq {a b : Frac} (h : a.num * b.den = b.num * a.den) : Valid (a ≈ₐ b) :=
   discrete.rel_of_eq h
 
-/-- Unfold the transparent fraction operations and close the integer identity. -/
-macro "frac_ring" : tactic =>
-  `(tactic| (simp only [add_num, add_den, mul_num, mul_den, neg_num, neg_den,
-    zero_num, zero_den, one_num, one_den]; ring))
+/-- `Frac`'s `≈ₐ` **is** the ℤ cross-product `≈ₐ` (definitionally) — the transparent
+`Frac`→ℤ bridge for the equality, used by `frac_aring` to drop a `Frac` goal to ℤ. -/
+theorem rel_eq (a b : Frac) :
+    (a ≈ₐ b) = (a.num * b.den ≈ₐ b.num * a.den) := rfl
+
+/-- Drop a `Frac` equality goal to its ℤ cross-product (`rel_eq`), expose the transparent
+operations (projection `rfl`s), and close with the affine ring solver `aring` on ℤ.  No raw
+`ring`: the ring axioms are discharged by the *same* affine solver the rest of the calculus
+uses, one level down. -/
+macro "frac_aring" : tactic =>
+  `(tactic| (simp only [rel_eq, add_num, add_den, mul_num, mul_den, neg_num, neg_den,
+    zero_num, zero_den, one_num, one_den]; aring))
 
 /-! ### The congruences, *inside the calculus*
 
@@ -211,14 +250,14 @@ def mulCong {a a' b b' : Frac} : (a ≈ₐ a') ⊓ (b ≈ₐ b') ⊢ (a * b ≈�
 
 /-- `Frac` is an **affine commutative ring**. -/
 instance : ARing Frac where
-  add_assoc a b c := rel_of_eq (by frac_ring)
-  add_comm a b := rel_of_eq (by frac_ring)
-  zero_add a := rel_of_eq (by frac_ring)
-  neg_add_cancel a := rel_of_eq (by frac_ring)
-  mul_assoc a b c := rel_of_eq (by frac_ring)
-  mul_comm a b := rel_of_eq (by frac_ring)
-  one_mul a := rel_of_eq (by frac_ring)
-  left_distrib a b c := rel_of_eq (by frac_ring)
+  add_assoc a b c := by frac_aring
+  add_comm a b := by frac_aring
+  zero_add a := by frac_aring
+  neg_add_cancel a := by frac_aring
+  mul_assoc a b c := by frac_aring
+  mul_comm a b := by frac_aring
+  one_mul a := by frac_aring
+  left_distrib a b c := by frac_aring
   add_cong' := addCong
   mul_cong' := mulCong
   neg_cong' := negCong
@@ -227,34 +266,49 @@ instance : ARing Frac where
 
 Each lemma scales the integer cross-products by the relevant (positive) denominators
 via `intLE.mulRight`, combines them with the integer `add_le_add`, and transports the
-endpoints to the goal's cross-product form with `intLE.ofEq` (the `ℤ` identities by
-`ring`).  No `linarith`; the only Lean-level facts are positivity of denominators. -/
+endpoints to the goal's cross-product form **on the sequent** — every cross-product
+rearrangement enters as an `≈`-resource (`lhave … by aring`) consumed by `intLE.congrL`/
+`congrR` (exactly the `aLE.trans` pattern; no raw `ofEq`/`ring`).  The only Lean-level
+facts are positivity of denominators. -/
 
 /-- Addition is monotone. -/
 def aLE.add_le_add {a b c d : Frac} : (a ≤ₐ b) ⊗ (c ≤ₐ d) ⊢ (a + c ≤ₐ b + d) := by
   linear
   lintro hab hcd
-  lhave pcd (intLE.nonneg (Int.mul_pos c.den_pos d.den_pos).le)
+  lhave pcd (zero_le_den_mul c d)
   lcombine s1 pcd hab intLE.mulRight
-  lhave pab (intLE.nonneg (Int.mul_pos a.den_pos b.den_pos).le)
+  lhave pab (zero_le_den_mul a b)
   lcombine s2 pab hcd intLE.mulRight
   lcombine t s1 s2 (AOrderedRing.add_le_add (α := ℤ))
-  lmap t (intLE.ofEq (a' := (a + c).num * (b + d).den) (b' := (b + d).num * (a + c).den)
-    (by simp only [add_num, add_den]; ring) (by simp only [add_num, add_den]; ring))
+  lhave eL (show Valid (a.num * b.den * (c.den * d.den) + c.num * d.den * (a.den * b.den)
+      ≈ₐ (a + c).num * (b + d).den) by simp only [add_num, add_den]; aring)
+  lcombine t1 eL t intLE.congrL
+  lhave eR (show Valid (b.num * a.den * (c.den * d.den) + d.num * c.den * (a.den * b.den)
+      ≈ₐ (b + d).num * (a + c).den) by simp only [add_num, add_den]; aring)
+  lcombine t2 eR t1 intLE.congrR
   lexact (Entails.refl _)
 
 /-- Right multiplication by a nonnegative element is monotone. -/
 def aLE.mul_le_mul_right {a b c : Frac} : (0 ≤ₐ c) ⊗ (a ≤ₐ b) ⊢ (a * c ≤ₐ b * c) := by
   linear
   lintro hc hab
-  -- from `0 ≤ₐ c` (i.e. `0 ≤ c.num`), build `0 ≤ c.num * c.den` to scale by
-  lhave pd (intLE.nonneg c.den_pos.le)
+  -- scale `hc : 0 ≤ₐ c` by `c.den` (denominator positivity on the sequent), reshape to
+  -- `0 ≤ₐ c.num * c.den`
+  lhave pd (zero_le_den c)
   lcombine s0 pd hc intLE.mulRight
-  lmap s0 (intLE.ofEq (a' := (0 : ℤ)) (b' := c.num * c.den)
-    (by simp only [zero_num]; ring) (by simp only [zero_den]; ring))
-  lcombine s1 s0 hab intLE.mulRight
-  lmap s1 (intLE.ofEq (a' := (a * c).num * (b * c).den) (b' := (b * c).num * (a * c).den)
-    (by simp only [mul_num, mul_den]; ring) (by simp only [mul_num, mul_den]; ring))
+  lhave e0L (show Valid ((0 : Frac).num * c.den * c.den ≈ₐ 0) by simp only [zero_num]; aring)
+  lcombine s0a e0L s0 intLE.congrL
+  lhave e0R (show Valid (c.num * (0 : Frac).den * c.den ≈ₐ c.num * c.den)
+    by simp only [zero_den]; aring)
+  lcombine s0b e0R s0a intLE.congrR
+  -- scale `a ≤ₐ b` by the (sequent-)nonnegative `c.num * c.den`, then transport to the goal
+  lcombine s1 s0b hab intLE.mulRight
+  lhave eL (show Valid (a.num * b.den * (c.num * c.den) ≈ₐ (a * c).num * (b * c).den)
+    by simp only [mul_num, mul_den]; aring)
+  lcombine t1 eL s1 intLE.congrL
+  lhave eR (show Valid (b.num * a.den * (c.num * c.den) ≈ₐ (b * c).num * (a * c).den)
+    by simp only [mul_num, mul_den]; aring)
+  lcombine t2 eR t1 intLE.congrR
   lexact (Entails.refl _)
 
 /-- `Frac` is an **affine ordered commutative ring** — the carrier the `llinarith`
@@ -263,7 +317,7 @@ solver runs over, and (being a field of fractions) the one whose division will l
 instance : AOrderedRing Frac where
   add_le_add := aLE.add_le_add
   mul_le_mul_right := aLE.mul_le_mul_right
-  zero_le_one := intLE.nonneg (by simp only [zero_den, one_num]; omega)
+  zero_le_one := Valid.of_holds (Trunc'.mk ⟨by decide⟩)
 
 /-! ## Order, absolute value, and limits — the analysis layer for the reals, *in the calculus*
 
@@ -274,52 +328,47 @@ in the `linear` proof mode (`lhave`/`lmap`/`lcombine` + `aring`/`asimp`).  The t
 `Frac`↔ℤ projection equalities are the bridge the atoms reduce across; they appear only
 *inside* atoms, never to prove a derived fact. -/
 
-/-- A valid `≤ₐ` from the integer cross-product inequality — the order analogue of `rel_of_eq`
-and an atom *constructor* (cf. `intLE.nonneg`). -/
+/-- A valid `≤ₐ` from the integer cross-product inequality — the order analogue of `rel_of_eq`,
+the `Frac` order's `Valid` constructor (`a ≤ₐ b` *is* `intLE (a.num*b.den) (b.num*a.den)`). -/
 def le_of_num {a b : Frac} (h : a.num * b.den ≤ b.num * a.den) : Valid (a ≤ₐ b) :=
   Valid.of_holds (Trunc'.mk ⟨h⟩)
 
--- The transparent `Frac`↔ℤ bridge, used only inside the atoms below.
+-- The transparent `Frac`↔ℤ bridge, used only to expose the cross-products for the ℤ atoms.
 theorem abs_num (a : Frac) : a.abs.num = |a.num| := rfl
 theorem abs_den (a : Frac) : a.abs.den = a.den := rfl
 
-/-- `|a·b| = |a|·|b|` on `ℤ`, proved through `natAbs` to stay `Classical`-free (Mathlib's
-generic `abs_mul` pulls `Classical.choice` via the ordered-ring hierarchy). -/
-private theorem intAbsMul (a b : ℤ) : |a * b| = |a| * |b| := by
-  rw [Int.abs_eq_natAbs, Int.natAbs_mul, Nat.cast_mul, Int.abs_eq_natAbs a, Int.abs_eq_natAbs b]
-
-/-- **Atom**: absolute value respects equality, `(a ≈ₐ b) ⊢ (|a| ≈ₐ |b|)`.  The ℤ content is
-`discrete.cong₁ |·|` on the cross-products, then `|x·d| = |x|·d` to refold the denominators. -/
+/-- Absolute value respects equality, `(a ≈ₐ b) ⊢ (|a| ≈ₐ |b|)` — composed in the calculus:
+`discrete.cong₁ |·|` on the cross-products, then refold `|x·d| ≈ₐ |x|·d` (`intAbsMulPos`). -/
 @[asimp] def abs_cong {a b : Frac} : (a ≈ₐ b) ⊢ (a.abs ≈ₐ b.abs) := by
   linear
   lintro h
   lmap h (discrete.cong₁ (fun x : ℤ => |x|))
-  lhave eL (discrete.rel_of_eq
-    (show |a.num| * b.den = |a.num * b.den| by rw [intAbsMul, abs_of_pos b.den_pos]))
-  lhave eR (discrete.rel_of_eq
-    (show |b.num * a.den| = |b.num| * a.den by rw [intAbsMul, abs_of_pos a.den_pos]))
+  lhave eL (relSymm (cut (zero_le_den b) (intAbsMulPos a.num)))  -- |an|·bd ≈ₐ |an·bd|
+  lhave eR (cut (zero_le_den a) (intAbsMulPos b.num))            -- |bn·ad| ≈ₐ |bn|·ad
   lcombine t₁ eL h (AEquiv.trans ..)
   lcombine t₂ t₁ eR (AEquiv.trans ..)
   lexact (Entails.refl _)
 
-/-- **Atom**: `|-a| ≈ₐ |a|` (the ℤ content is `Int.abs_neg` on the numerators). -/
+/-- `|-a| ≈ₐ |a|` — the numerator fact `intAbsNeg` (`|-an| ≈ₐ |an|`) scaled by the denominator
+(`discrete.cong₁ (· * a.den)`). -/
 @[asimp] def abs_neg (a : Frac) : Valid ((-a).abs ≈ₐ a.abs) :=
-  rel_of_eq (by simp only [abs_num, abs_den, neg_num, neg_den]; rw [_root_.abs_neg])
+  cut (intAbsNeg a.num) (discrete.cong₁ (fun x : ℤ => x * a.den))
 
-/-- **Atom**: `|0| ≈ₐ 0`. -/
+/-- `|0| ≈ₐ 0`. -/
 @[asimp] def abs_zero : Valid ((0 : Frac).abs ≈ₐ 0) :=
   rel_of_eq (by simp only [abs_num, abs_den, zero_num, zero_den, _root_.abs_zero])
 
-/-- **Atom**: the triangle inequality `|a + b| ≤ₐ |a| + |b|` (the ℤ content is `abs_add_le`
-plus `|x·d| = |x|·d`, scaled by the common positive denominator). -/
-def abs_triangle (a b : Frac) : Valid ((a + b).abs ≤ₐ a.abs + b.abs) := by
-  apply le_of_num
-  simp only [abs_num, abs_den, add_num, add_den]
-  refine Int.mul_le_mul_of_nonneg_right ?_ (Int.mul_pos a.den_pos b.den_pos).le
-  calc |a.num * b.den + b.num * a.den|
-      ≤ |a.num * b.den| + |b.num * a.den| := abs_add_le _ _
-    _ = |a.num| * b.den + |b.num| * a.den := by
-        rw [intAbsMul, intAbsMul, abs_of_pos b.den_pos, abs_of_pos a.den_pos]
+/-- The triangle inequality `|a + b| ≤ₐ |a| + |b|` — composed in the calculus from the atomic
+ℤ triangle `intLE.abs_add`: refold the abs-products on the right (`intAbsMulPos`, via
+`le_congrR`), then scale by the common positive denominator (`intLE.mulRight`). -/
+def abs_triangle (a b : Frac) : Valid ((a + b).abs ≤ₐ a.abs + b.abs) :=
+  -- `|an·bd + bn·ad| ≤ₐ |an|·bd + |bn|·ad` on the numerators…
+  have tri : Valid (|a.num * b.den + b.num * a.den| ≤ₐ |a.num| * b.den + |b.num| * a.den) :=
+    cut (intLE.abs_add (a.num * b.den) (b.num * a.den))
+      (AOrd.le_congrR (addApp (cut (zero_le_den b) (intAbsMulPos a.num))
+        (cut (zero_le_den a) (intAbsMulPos b.num))))
+  -- …then scale both sides by the common (positive) denominator `a.den · b.den`.
+  cut (cut unit_tensor (tensor_mono (zero_le_den_mul a b) tri)) intLE.mulRight
 
 /-- `|a - b| ≈ₐ |b - a|` — composed in the calculus: rewrite `a - b ≈ₐ -(b - a)` (`aring`) under
 `abs` (`abs_cong`), then `abs_neg`. -/
@@ -341,7 +390,7 @@ theorem half_den (q : Frac) : (half q).den = 2 * q.den := rfl
 
 /-- `q/2 + q/2 ≈ₐ q` — a normalisation rule for `asimp`. -/
 @[asimp] def half_add_half (q : Frac) : Valid (half q + half q ≈ₐ q) :=
-  rel_of_eq (by simp only [add_num, add_den, half_num, half_den]; ring)
+  by simp only [rel_eq, add_num, add_den, half_num, half_den]; aring
 
 /-- A strictly-positive fraction — a precision for the reals. -/
 abbrev PosFrac := {q : Frac // 0 < q.num}
