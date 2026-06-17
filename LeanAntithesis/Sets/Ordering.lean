@@ -56,6 +56,16 @@ def le_congr {a a' b b' : α} (ha : Valid (a ≈ₐ a')) (hb : Valid (b ≈ₐ b
     (a ≤ₐ b) ⊢ (a' ≤ₐ b') :=
   cut (le_congrL ha) (le_congrR hb)
 
+/-- Compose two valid `≤ₐ` facts — the `Valid`-level transitivity (the order analogue of
+`relTrans`), for chaining closed inequalities in term mode. -/
+def leTrans {x y z : α} (h₁ : Valid (x ≤ₐ y)) (h₂ : Valid (y ≤ₐ z)) : Valid (x ≤ₐ z) :=
+  cut (cut unit_tensor (tensor_mono h₁ h₂)) (le_trans x y z)
+
+/-- Prepend a closed lower bound to a `≤ₐ` sequent: with `a ≤ₐ b` valid, `(b ≤ₐ c) ⊢ (a ≤ₐ c)`
+(the order analogue of `relCongrL`). -/
+def le_transL {a b c : α} (h : Valid (a ≤ₐ b)) : (b ≤ₐ c) ⊢ (a ≤ₐ c) :=
+  cut unit_tensor (cut tensor_comm (cut (tensor_mono h (Entails.refl _)) (le_trans a b c)))
+
 end AOrd
 
 @[inherit_doc] scoped infix:50 " <ₐ " => AOrd.lt

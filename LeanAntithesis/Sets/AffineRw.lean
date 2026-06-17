@@ -17,6 +17,10 @@ mode, a **context resource** named in `Γ`: a linear `x ≈ₐ y` (consumed by t
 duplicable `!(x ≈ₐ y)` (a copy is taken with `ldup`, so the resource persists).
 -/
 
+/-- `@[asimp]` marks an affine rewrite rule `Valid (lhs ≈ₐ rhs)` for the `asimp` tactic — the
+affine analogue of `@[simp]` (whose rules are `=`/`Iff`).  Rules rewrite left-to-right. -/
+register_label_attr asimp
+
 namespace Antithesis
 open Lean Elab Tactic Meta
 open scoped Antithesis
@@ -133,6 +137,29 @@ elab "arw" "[" rules:term,* "]" : tactic => do
     | some (nm, resTy) => arwResource nm resTy
     | none => arwTerm (← elabTerm ruleStx none)
   -- close if the rewritten left side now matches the right side (reflexivity from any context)
+  evalTactic (← `(tactic| first | exact Entails.of_holds (AEquiv.refl _).holds | skip))
+
+/-- Try to rewrite the goal's left side by a single `@[asimp]` rule `nm` (instantiating its
+universally-quantified variables with metavariables, matched by `arwTerm`'s `kabstract`).
+Returns whether it fired. -/
+def tryAsimpRule (nm : Name) : TacticM Bool := do
+  try
+    let cst ← mkConstWithFreshMVarLevels nm
+    let (mvars, _, _) ← forallMetaTelescopeReducing (← inferType cst)
+    arwTerm (mkAppN cst mvars)
+    pure true
+  catch _ => pure false
+
+/-- `asimp` — the affine analogue of `simp`: repeatedly rewrite the left side of an `a ≈ₐ b`
+goal (closed `Valid`/`⊢` or a proof-mode `Seq`) by the `@[asimp]`-tagged affine equalities
+until none fires, then close by reflexivity.  Generic over any `AEquiv` carrier. -/
+elab "asimp" : tactic => do
+  let names ← Lean.labelled `asimp
+  for _ in [0:100] do
+    let mut fired := false
+    for nm in names do
+      if ← tryAsimpRule nm then fired := true
+    unless fired do break
   evalTactic (← `(tactic| first | exact Entails.of_holds (AEquiv.refl _).holds | skip))
 
 end Antithesis
